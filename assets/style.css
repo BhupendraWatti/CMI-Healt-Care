@@ -1,0 +1,565 @@
+/* CMI Partner Portal – Premium Standalone & Elementor Style Sheet */
+
+:root {
+    --cmi-primary: #1a4f8a;
+    --cmi-primary-hover: #123862;
+    --cmi-primary-light: #eef4ff;
+    --cmi-success: #27ae60;
+    --cmi-success-border: #2ecc71;
+    --cmi-success-bg: #eafaf1;
+    --cmi-error: #c0392b;
+    --cmi-error-border: #e74c3c;
+    --cmi-error-bg: #fdecea;
+    --cmi-bg-card: #ffffff;
+    --cmi-border: #e2e8f0;
+    --cmi-text-main: #2d3748;
+    --cmi-text-muted: #718096;
+}
+
+/* Global Table Styles */
+.cmi-reports-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 20px 0;
+    font-size: 14px;
+    border: 1px solid var(--cmi-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.cmi-reports-table th,
+.cmi-reports-table td {
+    padding: 14px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--cmi-border);
+    vertical-align: middle;
+    color: var(--cmi-text-main);
+}
+.cmi-reports-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--cmi-border);
+}
+.cmi-reports-table tr:last-child td {
+    border-bottom: none;
+}
+.cmi-reports-table tr:hover td {
+    background: #f8fafc;
+}
+
+/* Form Styles */
+.cmi-partner-upload {
+    max-width: 100%;
+}
+.cmi-upload-box, .cmi-guest-box, .cmi-auth-card {
+    background: var(--cmi-bg-card);
+    border: 1px solid var(--cmi-border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    transition: box-shadow 0.3s ease;
+}
+.cmi-upload-box:hover, .cmi-guest-box:hover, .cmi-auth-card:hover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+.cmi-upload-box h2, .cmi-guest-box h2, .cmi-auth-card h2 {
+    margin: 0 0 8px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--cmi-primary);
+}
+.cmi-form-row {
+    margin-bottom: 20px;
+}
+.cmi-form-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 13.5px;
+    color: #334155;
+}
+.cmi-form-row input[type="text"],
+.cmi-form-row input[type="tel"],
+.cmi-form-row input[type="email"],
+.cmi-form-row input[type="password"],
+.cmi-form-row select,
+.cmi-form-row textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: 11px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    color: var(--cmi-text-main);
+}
+.cmi-form-row input:focus,
+.cmi-form-row select:focus,
+.cmi-form-row textarea:focus {
+    border-color: var(--cmi-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(26, 79, 138, 0.15);
+}
+.cmi-form-row textarea {
+    resize: vertical;
+}
+.req {
+    color: var(--cmi-error);
+}
+small {
+    color: var(--cmi-text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+    display: inline-block;
+}
+
+/* Custom Portal Buttons */
+.button-primary.cmi-auth-submit-btn,
+.button-primary#cmi-upload-btn,
+.button-primary#cmi-rx-upload-btn,
+.button-primary#cmi-send-otp-btn,
+.button-primary#cmi-send-uid-otp-btn,
+.button-primary#cmi-view-reports-btn,
+.button-primary#cmi-verify-otp-btn {
+    background: var(--cmi-primary) !important;
+    color: #fff !important;
+    border: none !important;
+    font-weight: 600 !important;
+    padding: 12px 24px !important;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.1s;
+    box-shadow: 0 4px 10px rgba(26, 79, 138, 0.2);
+}
+.button-primary.cmi-auth-submit-btn:hover,
+.button-primary#cmi-upload-btn:hover,
+.button-primary#cmi-rx-upload-btn:hover,
+.button-primary#cmi-send-otp-btn:hover,
+.button-primary#cmi-send-uid-otp-btn:hover,
+.button-primary#cmi-view-reports-btn:hover,
+.button-primary#cmi-verify-otp-btn:hover {
+    background: var(--cmi-primary-hover) !important;
+}
+
+/* Secondary Buttons */
+.cmi-reports-table .button,
+.cmi-partner-upload .button {
+    font-size: 13px !important;
+    padding: 6px 14px !important;
+    border-radius: 4px !important;
+    border: 1px solid var(--cmi-border) !important;
+    background: #fff !important;
+    color: var(--cmi-text-main) !important;
+    font-weight: 500 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    transition: all 0.2s ease;
+}
+.cmi-reports-table .button:hover,
+.cmi-partner-upload .button:hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: var(--cmi-primary) !important;
+}
+.cmi-reports-table .button.button-secondary,
+.cmi-partner-upload .button.button-secondary {
+    background: var(--cmi-primary-light) !important;
+    color: var(--cmi-primary) !important;
+    border: 1px solid transparent !important;
+}
+.cmi-reports-table .button.button-secondary:hover,
+.cmi-partner-upload .button.button-secondary:hover {
+    background: #e0ecff !important;
+}
+
+/* Alert Messages */
+.cmi-msg {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 13.5px;
+    font-weight: 500;
+}
+.cmi-msg-error {
+    background: var(--cmi-error-bg);
+    color: var(--cmi-error);
+    border-left: 4px solid var(--cmi-error-border);
+}
+.cmi-msg-success, .cmi-success-msg {
+    background: var(--cmi-success-bg);
+    color: var(--cmi-success);
+    border-left: 4px solid var(--cmi-success-border);
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 13.5px;
+    font-weight: 500;
+}
+.cmi-empty {
+    color: var(--cmi-text-muted);
+    font-style: italic;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 6px;
+    border: 1px dashed var(--cmi-border);
+}
+
+/* Guest Portal Layout */
+.cmi-guest-download {
+    max-width: 580px;
+    margin: 30px auto;
+}
+.cmi-guest-box {
+    padding: 36px;
+}
+
+/* Navigation Tabs */
+.cmi-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--cmi-border);
+    margin-bottom: 24px;
+    gap: 8px;
+}
+.cmi-tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 12px 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--cmi-text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+.cmi-tab-btn:hover {
+    color: var(--cmi-primary);
+}
+.cmi-tab-btn.active {
+    color: var(--cmi-primary);
+    border-bottom: 2px solid var(--cmi-primary);
+}
+
+/* Partner Registration Form Panel */
+#cmi-partner-fields {
+    background: #f8fafc;
+    border: 1px solid var(--cmi-border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 10px;
+}
+
+/* Custom Dashboard Header */
+.cmi-dashboard-header {
+    background: #f8fafc;
+    padding: 16px 24px;
+    border-radius: 8px;
+    border: 1px solid var(--cmi-border);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+/* Standalone Auth Styles */
+.cmi-portal-auth {
+    max-width: 480px;
+    margin: 40px auto;
+    padding: 0 15px;
+}
+.cmi-auth-card {
+    padding: 36px;
+}
+.cmi-auth-toggle-tabs {
+    margin-bottom: 28px;
+}
+.cmi-auth-toggle-tabs .cmi-tab-btn {
+    padding: 10px 6px;
+    font-size: 13px;
+}
+.cmi-portal-notice {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    color: #b45309;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    font-weight: 500;
+}
+.cmi-portal-notice p {
+    margin: 0 0 10px 0;
+}
+.cmi-portal-notice p:last-child {
+    margin: 0;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 600px) {
+    .cmi-guest-box, .cmi-upload-box, .cmi-auth-card {
+        padding: 20px;
+    }
+    .cmi-tabs {
+        flex-direction: column;
+        border-bottom: none;
+        gap: 6px;
+    }
+    .cmi-tab-btn {
+        border-bottom: none;
+        border-radius: 6px;
+        background: #f1f5f9;
+        padding: 10px;
+        margin-bottom: 0;
+    }
+    .cmi-tab-btn.active {
+        background: var(--cmi-primary);
+        color: #fff;
+        border-bottom: none;
+    }
+    .cmi-tab-btn:hover {
+        background: #e2e8f0;
+    }
+    .cmi-reports-table {
+        display: block;
+        overflow-x: auto;
+    }
+    .cmi-dashboard-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+    }
+}
+
+/* Home Collection Specific Styles */
+.cmi-patient-dashboard-wrapper,
+.cmi-partner-dashboard-wrapper {
+    margin: 20px 0;
+    font-family: inherit;
+}
+
+/* Responsive Table Container */
+.cmi-table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
+}
+
+.cmi-dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    min-width: 800px; /* Ensure columns have breathing room */
+}
+
+.cmi-dashboard-table th,
+.cmi-dashboard-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.cmi-dashboard-table th {
+    background-color: #f7fafc;
+    color: #4a5568;
+    font-weight: 600;
+}
+
+/* Status Badges */
+.cmi-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: capitalize;
+}
+
+.cmi-status-pending_assignment {
+    background-color: #feebc8;
+    color: #c05621;
+}
+
+.cmi-status-assigned {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-accepted {
+    background-color: #e6fffa;
+    color: #319795;
+}
+
+.cmi-status-completed {
+    background-color: #c6f6d5;
+    color: #22543d;
+}
+
+.cmi-status-rejected {
+    background-color: #fed7d7;
+    color: #9b2c2c;
+}
+
+.cmi-status-awaiting-prescription {
+    background-color: #feebc8;
+    color: #c05621;
+}
+
+.cmi-status-rescheduled {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-needs-reschedule,
+.cmi-status-reschedule-requested {
+    background-color: #feebc8;
+    color: #c05621;
+}
+
+.cmi-status-pending-confirmation,
+.cmi-status-pending_confirmation {
+    background-color: #fbd38d;
+    color: #9c4221;
+}
+
+.cmi-status-expired-missed {
+    background-color: #fed7d7;
+    color: #9b2c2c;
+}
+
+/* Buttons */
+.button.cmi-download-btn {
+    background-color: #3182ce;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+}
+
+.button.cmi-download-btn:hover {
+    background-color: #2b6cb0;
+}
+
+/* Modals */
+#cmi-reschedule-modal,
+#cmi-reject-modal,
+#cmi-upload-report-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+}
+
+.cmi-modal-content {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.cmi-modal-content h3 {
+    margin-top: 0;
+    color: #2d3748;
+    border-bottom: 1px solid #edf2f7;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.cmi-modal-content p {
+    margin-bottom: 15px;
+}
+
+.cmi-modal-content label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #4a5568;
+}
+
+.cmi-modal-content input[type="text"],
+.cmi-modal-content input[type="date"],
+.cmi-modal-content input[type="file"],
+.cmi-modal-content select,
+.cmi-modal-content textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.cmi-modal-content input[disabled] {
+    background-color: #edf2f7;
+    color: #718096;
+    cursor: not-allowed;
+}
+
+.cmi-modal-content textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.cmi-success-text {
+    color: #38a169;
+    font-weight: 500;
+}
+
+.req {
+    color: #e53e3e;
+    font-weight: bold;
+}
+
+/* Jitsi Overlay Styling */
+#cmi-jitsi-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(9, 9, 11, 0.8) !important;
+    backdrop-filter: blur(4px);
+    z-index: 99999 !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+#cmi-jitsi-overlay > div {
+    width: 100%;
+    max-width: 960px;
+    background: #ffffff;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Responsiveness for small screens */
+@media (max-width: 768px) {
+    #cmi-jitsi-overlay {
+        padding: 10px;
+    }
+    #cmi-jitsi-overlay > div {
+        height: 100%;
+        max-height: 100%;
+    }
+    #cmi-jitsi-overlay iframe {
+        height: 100% !important;
+    }
+}

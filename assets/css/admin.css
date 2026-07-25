@@ -1,0 +1,64 @@
+/* Admin Panel Styles */
+.cmi-status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cmi-status-pending_assignment {
+    background-color: #feebc8;
+    color: #c05621;
+}
+
+.cmi-status-assigned {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-accepted {
+    background-color: #e6fffa;
+    color: #319795;
+}
+
+.cmi-status-completed {
+    background-color: #c6f6d5;
+    color: #22543d;
+}
+
+.cmi-status-rejected {
+    background-color: #fed7d7;
+    color: #9b2c2c;
+}
+
+.cmi-status-rescheduled {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-pending-confirmation,
+.cmi-status-pending_confirmation {
+    background-color: #fbd38d;
+    color: #9c4221;
+}
+
+.cmi-reschedule-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cmi-reschedule-actions .dashicons-warning {
+    color: #dd6b20;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    cursor: help;
+}
+
+.cmi-partner-assign-select {
+    max-width: 150px;
+}

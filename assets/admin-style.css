@@ -1,0 +1,48 @@
+/* CMI Admin Styles */
+.cmi-admin-cards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 16px 0 24px;
+}
+.cmi-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px 24px;
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.cmi-card.cmi-warn { border-color: #e67e22; }
+.cmi-num { font-size: 32px; font-weight: 700; color: #1a4f8a; line-height: 1.1; }
+.cmi-lbl { font-size: 13px; color: #666; margin-top: 4px; }
+
+/* Dynamic Tag Badge & Form Controls */
+.cmi-insert-var-btn {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    font-size: 11px !important;
+    background: #eef4ff !important;
+    color: #1a4f8a !important;
+    border: 1px solid #bfdbfe !important;
+    border-radius: 4px !important;
+    padding: 2px 6px !important;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.cmi-insert-var-btn:hover {
+    background: #dbeafe !important;
+    border-color: #93c5fd !important;
+}
+
+@media (max-width: 782px) {
+    .cmi-admin-cards {
+        flex-direction: column;
+    }
+    .cmi-card {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+

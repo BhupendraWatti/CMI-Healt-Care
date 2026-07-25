@@ -1,0 +1,244 @@
+/* Frontend Dashboard Styles */
+.cmi-patient-dashboard-wrapper,
+.cmi-partner-dashboard-wrapper {
+    margin: 20px 0;
+    font-family: inherit;
+}
+
+/* Responsive Table Container */
+.cmi-table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
+}
+
+.cmi-dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    min-width: 800px; /* Ensure columns have breathing room */
+}
+
+.cmi-dashboard-table th,
+.cmi-dashboard-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+
+.cmi-dashboard-table th {
+    background-color: #f7fafc;
+    color: #4a5568;
+    font-weight: 600;
+}
+
+/* Status Badges */
+.cmi-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: capitalize;
+}
+
+.cmi-status-pending_assignment {
+    background-color: #feebc8;
+    color: #c05621;
+}
+
+.cmi-status-assigned {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-accepted {
+    background-color: #e6fffa;
+    color: #319795;
+}
+
+.cmi-status-completed {
+    background-color: #c6f6d5;
+    color: #22543d;
+}
+
+.cmi-status-rejected {
+    background-color: #fed7d7;
+    color: #9b2c2c;
+}
+
+.cmi-status-rescheduled {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+}
+
+.cmi-status-pending-confirmation,
+.cmi-status-pending_confirmation {
+    background-color: #fbd38d;
+    color: #9c4221;
+}
+
+/* Consultation-specific status badges (BUG-11 fix) */
+.cmi-status-expired-missed {
+    background-color: #fed7d7;
+    color: #9b2c2c;
+}
+
+.cmi-status-awaiting-prescription {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.cmi-status-awaiting_prescription {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.cmi-status-needs-reschedule,
+.cmi-status-needs_reschedule {
+    background-color: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+}
+
+.cmi-status-in-progress,
+.cmi-status-in_progress {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.cmi-status-scheduled {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.cmi-status-cancelled {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.cmi-status-requested {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+/* Buttons */
+.button.cmi-download-btn {
+    background-color: #3182ce;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+}
+
+.button.cmi-download-btn:hover {
+    background-color: #2b6cb0;
+}
+
+/* Modals */
+#cmi-reschedule-modal,
+#cmi-reject-modal,
+#cmi-upload-report-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+}
+
+.cmi-modal-content {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.cmi-modal-content h3 {
+    margin-top: 0;
+    color: #2d3748;
+    border-bottom: 1px solid #edf2f7;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.cmi-modal-content p {
+    margin-bottom: 15px;
+}
+
+.cmi-modal-content label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #4a5568;
+}
+
+.cmi-modal-content input[type="text"],
+.cmi-modal-content input[type="date"],
+.cmi-modal-content input[type="file"],
+.cmi-modal-content select,
+.cmi-modal-content textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.cmi-modal-content input[disabled] {
+    background-color: #edf2f7;
+    color: #718096;
+    cursor: not-allowed;
+}
+
+.cmi-modal-content textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.cmi-success-text {
+    color: #38a169;
+    font-weight: 500;
+}
+
+.req {
+    color: #e53e3e;
+    font-weight: bold;
+}
+
+/* Animations & Loading Spinners */
+@keyframes cmi-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.cmi-spinner {
+    animation: cmi-spin 0.8s linear infinite;
+}
+
+/* Responsive Grid Adjustments */
+@media (max-width: 768px) {
+    .cmi-table-responsive {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    .cmi-dashboard-table {
+        min-width: 650px;
+    }
+    .cmi-modal-content {
+        width: 95%;
+        padding: 20px;
+        margin: 10px;
+    }
+}
+
