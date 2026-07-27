@@ -857,6 +857,7 @@ class CMI_HT_Shortcodes {
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-partner-portal' ) ] );
+            wp_die();
         }
 
         $id           = isset( $_POST['member_id'] ) ? intval( $_POST['member_id'] ) : 0;
@@ -868,6 +869,7 @@ class CMI_HT_Shortcodes {
 
         if ( empty( $name ) || empty( $dob ) || empty( $relationship ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Please fill in all required fields.', 'cmi-partner-portal' ) ] );
+            wp_die();
         }
 
         if ( $id ) {
@@ -875,11 +877,13 @@ class CMI_HT_Shortcodes {
             $member = CMI_HT_DB::get_member( $id );
             if ( ! $member || intval( $member->user_id ) !== intval( $user_id ) ) {
                 wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized member update.', 'cmi-partner-portal' ) ] );
+                wp_die();
             }
 
             // If relation was 'Self', prevent changing it
             if ( 'Self' === $member->relationship && 'Self' !== $relationship ) {
                 wp_send_json_error( [ 'message' => esc_html__( 'Cannot modify the relationship of your primary profile.', 'cmi-partner-portal' ) ] );
+                wp_die();
             }
 
             $update = CMI_HT_DB::update_member( $id, $user_id, $name, $gender, $dob, $relationship, $mobile );
@@ -897,6 +901,7 @@ class CMI_HT_Shortcodes {
                 wp_send_json_error( [ 'message' => esc_html__( 'Failed to add family member.', 'cmi-partner-portal' ) ] );
             }
         }
+        wp_die();
     }
 
     /**
@@ -908,11 +913,13 @@ class CMI_HT_Shortcodes {
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-partner-portal' ) ] );
+            wp_die();
         }
 
         $member_id = isset( $_POST['member_id'] ) ? intval( $_POST['member_id'] ) : 0;
         if ( ! $member_id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Invalid member ID.', 'cmi-partner-portal' ) ] );
+            wp_die();
         }
 
         $delete = CMI_HT_DB::delete_member( $member_id, $user_id );
@@ -921,5 +928,6 @@ class CMI_HT_Shortcodes {
         } else {
             wp_send_json_error( [ 'message' => esc_html__( 'Cannot remove member. Primary profiles cannot be deleted.', 'cmi-partner-portal' ) ] );
         }
+        wp_die();
     }
 }

@@ -23,12 +23,19 @@ class CMI_OTP {
         $expires = gmdate( 'Y-m-d H:i:s', time() + 600 ); // 10 minutes, UTC
 
         $table = $wpdb->prefix . 'cmi_otp';
-        $wpdb->delete( $table, [ 'mobile' => $mobile ] );
-        $wpdb->insert( $table, [
+        
+        // Log before delete+insert
+        error_log( "CMI OTP GENERATE [{$mobile}]: table={$table}, otp_plain={$otp}, expires={$expires}" );
+        
+        $del = $wpdb->delete( $table, [ 'mobile' => $mobile ] );
+        error_log( "CMI OTP GENERATE [{$mobile}]: delete result=" . var_export($del, true) . " last_error='" . $wpdb->last_error . "'" );
+        
+        $ins = $wpdb->insert( $table, [
             'mobile'     => $mobile,
             'otp'        => wp_hash_password( $otp ),
             'expires_at' => $expires,
         ]);
+        error_log( "CMI OTP GENERATE [{$mobile}]: insert result=" . var_export($ins, true) . " insert_id={$wpdb->insert_id} last_error='" . $wpdb->last_error . "'" );
 
         return $otp;
     }
@@ -44,17 +51,30 @@ class CMI_OTP {
         global $wpdb;
         $table = $wpdb->prefix . 'cmi_otp';
         $now   = gmdate( 'Y-m-d H:i:s' );
+        $otp   = trim( (string) $otp );
+        
         $row   = $wpdb->get_row( $wpdb->prepare(
             "SELECT * FROM $table WHERE mobile = %s AND expires_at > %s ORDER BY id DESC LIMIT 1",
             $mobile,
             $now
         ));
 
-        if ( ! $row ) return false;
+        if ( ! $row ) {
+            $latest = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE mobile = %s ORDER BY id DESC LIMIT 1", $mobile ) );
+            if ( $latest ) {
+                error_log( "CMI OTP VERIFY FAILED [{$mobile}]: Record EXPIRED. DB expires_at='{$latest->expires_at}', current_now='{$now}'." );
+            } else {
+                error_log( "CMI OTP VERIFY FAILED [{$mobile}]: NO RECORD found in {$table} for mobile '{$mobile}'." );
+            }
+            return false;
+        }
 
         $valid = wp_check_password( $otp, $row->otp );
         if ( $valid ) {
+            error_log( "CMI OTP VERIFY SUCCESS [{$mobile}]: Code matched!" );
             $wpdb->delete( $table, [ 'id' => $row->id ] );
+        } else {
+            error_log( "CMI OTP VERIFY FAILED [{$mobile}]: Password hash check failed. Entered OTP='{$otp}', Hashed OTP='{$row->otp}'." );
         }
         return $valid;
     }
@@ -78,20 +98,42 @@ class CMI_OTP {
         ]);
 
         if ( $result && ! empty( $result['success'] ) ) {
+            error_log( "CMI OTP SENT OK [{$mobile}] via send_event_sms (otp_access template)." );
             return true;
         }
 
-        // Fallback: Direct SMS send if event template not configured in admin yet
-        $message     = "Your CMI Healthcare access OTP is: {$otp}. Valid for 10 minutes. Do not share.";
+        // Log why send_event_sms failed (template or message might be empty in admin)
+        error_log( "CMI OTP send_event_sms('otp_access') failed for [{$mobile}]. Trying direct fallback." );
+
+        // Fallback: use the DLT-approved message text stored in DB option
+        // DO NOT use hardcoded non-DLT message — Airtel will reject it.
         $dlt_tmpl_id = get_option( 'cmi_dlt_tmpl_otp_access', get_option( 'cmi_dlt_tmpl_otp', '' ) );
-        $direct      = CMI_SMS_Manager::send_sms( $mobile, $message, $dlt_tmpl_id );
+        $dlt_msg     = get_option( 'cmi_dlt_msg_otp_access', '' );
+
+        // Interpolate {otp} placeholder in the DLT-approved message text
+        if ( ! empty( $dlt_msg ) ) {
+            $dlt_msg = str_replace( '{otp}', $otp, $dlt_msg );
+        } else {
+            // If no message is configured at all, log and fail — do NOT use hardcoded text.
+            error_log( "CMI OTP FAILED [{$mobile}]: No DLT message text configured for otp_access. Go to Admin > CMI Portal > SMS Settings and set the OTP message text." );
+            return false;
+        }
+
+        if ( empty( $dlt_tmpl_id ) ) {
+            error_log( "CMI OTP FAILED [{$mobile}]: No DLT Template ID configured for otp_access. Go to Admin > CMI Portal > SMS Settings and set the OTP Template ID." );
+            return false;
+        }
+
+        $direct = CMI_SMS_Manager::send_sms( $mobile, $dlt_msg, $dlt_tmpl_id );
 
         if ( ! empty( $direct['success'] ) ) {
+            error_log( "CMI OTP SENT OK [{$mobile}] via direct send_sms fallback. Template ID: {$dlt_tmpl_id}" );
             return true;
         }
 
-        // Development fallback: log OTP when SMS gateway is not configured
-        error_log( "CMI OTP [{$mobile}]: {$otp}" );
-        return true;
+        $fail_reason = $direct['message'] ?? 'Unknown Airtel API error';
+        error_log( "CMI OTP GATEWAY FAILED [{$mobile}]: {$fail_reason}. Template ID: {$dlt_tmpl_id}" );
+        return false;
     }
 }
+

@@ -554,7 +554,7 @@ class CMI_HT_Checkout {
         $is_pending_conf = $order->get_meta( '_cmi_pending_confirmation' ) === 'yes';
         $status = $is_pending_conf ? 'pending_confirmation' : 'pending_assignment';
 
-        $wpdb->insert(
+        $inserted = $wpdb->insert(
             $table,
             [
                 'order_id'             => $order_id,
@@ -566,6 +566,19 @@ class CMI_HT_Checkout {
             ],
             [ '%d', '%s', '%s', '%s', '%s', '%s' ]
         );
+
+        if ( $inserted && class_exists( 'CMI_SMS_Manager' ) ) {
+            $patient_name   = $order->get_meta( '_cmi_patient_name' ) ?: ( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+            $patient_mobile = $order->get_meta( '_cmi_patient_mobile' ) ?: $order->get_billing_phone();
+            if ( ! empty( $patient_mobile ) ) {
+                CMI_SMS_Manager::send_event_sms( 'booking_confirmed', $patient_mobile, [
+                    'name'     => $patient_name,
+                    'order_id' => $order_id,
+                    'date'     => $date,
+                    'slot'     => $slot,
+                ] );
+            }
+        }
     }
 
     /**

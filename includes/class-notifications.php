@@ -329,7 +329,7 @@ class CMI_HT_Notifications {
         // Transactional SMS trigger to Patient
         $patient_mobile = $order->get_meta( '_cmi_patient_mobile' ) ?: $order->get_billing_phone();
         if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'booking_confirmed', $patient_mobile, [
+            CMI_SMS_Manager::send_event_sms( 'partner_accepted', $patient_mobile, [
                 'name'     => $patient_name,
                 'order_id' => $row->order_id,
                 'date'     => $row->collection_date,
@@ -654,6 +654,17 @@ class CMI_HT_Notifications {
         $html_message = $this->get_html_email_template( __( 'Reschedule Requested by Patient', 'cmi-home-testing' ), $body_content );
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         wp_mail( $to, $subject, $html_message, $headers );
+
+        // Transactional SMS trigger to Patient
+        $patient_mobile = $order->get_meta( '_cmi_patient_mobile' ) ?: $order->get_billing_phone();
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile ) ) {
+            CMI_SMS_Manager::send_event_sms( 'reschedule_requested', $patient_mobile, [
+                'name'     => $patient_name,
+                'order_id' => $row->order_id,
+                'date'     => $date,
+                'slot'     => $slot,
+            ] );
+        }
     }
 
     /**
@@ -727,6 +738,17 @@ class CMI_HT_Notifications {
         $html_message = $this->get_html_email_template( __( 'Collection Rescheduled', 'cmi-home-testing' ), $body_content );
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         wp_mail( $to, $subject, $html_message, $headers );
+
+        // Transactional SMS trigger to Patient
+        $patient_mobile = $order->get_meta( '_cmi_patient_mobile' ) ?: $order->get_billing_phone();
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile ) ) {
+            CMI_SMS_Manager::send_event_sms( 'reschedule_approved', $patient_mobile, [
+                'name'     => $patient_name,
+                'order_id' => $row->order_id,
+                'date'     => isset( $row->reschedule_date ) ? $row->reschedule_date : $row->collection_date,
+                'slot'     => isset( $row->reschedule_time_slot ) ? $row->reschedule_time_slot : $row->collection_time_slot,
+            ] );
+        }
     }
 
     /**

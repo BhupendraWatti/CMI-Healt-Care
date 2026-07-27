@@ -13,6 +13,7 @@ class CMI_Upload {
 
         if ( ! is_user_logged_in() || ! current_user_can( 'cmi_upload_report' ) ) {
             wp_send_json_error( [ 'message' => 'Permission denied.' ] );
+            wp_die();
         }
 
         $mobile = isset( $_POST['patient_mobile'] ) ? preg_replace( '/[^0-9+]/', '', $_POST['patient_mobile'] ) : '';
@@ -24,10 +25,12 @@ class CMI_Upload {
 
         if ( empty( $mobile ) && empty( $email ) && empty( $uid ) ) {
             wp_send_json_error( [ 'message' => 'Patient mobile number, email, or unique ID is required.' ] );
+            wp_die();
         }
 
         if ( empty( $_FILES['report_file'] ) || $_FILES['report_file']['error'] !== UPLOAD_ERR_OK ) {
             wp_send_json_error( [ 'message' => 'Please select a valid file to upload.' ] );
+            wp_die();
         }
 
         $file = $_FILES['report_file'];
@@ -35,6 +38,7 @@ class CMI_Upload {
         // Max 10 MB
         if ( $file['size'] > 10 * 1024 * 1024 ) {
             wp_send_json_error( [ 'message' => 'File size must be under 10 MB.' ] );
+            wp_die();
         }
 
         $result = CMI_CPT::save_report([
@@ -53,9 +57,11 @@ class CMI_Upload {
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+            wp_die();
         }
 
         wp_send_json_success( [ 'message' => 'Report uploaded successfully.', 'report_id' => $result ] );
+        wp_die();
     }
 
     public static function handle_prescription() {
@@ -63,6 +69,7 @@ class CMI_Upload {
 
         if ( ! is_user_logged_in() || ! current_user_can( 'cmi_upload_prescription' ) ) {
             wp_send_json_error( [ 'message' => 'Permission denied.' ] );
+            wp_die();
         }
 
         $mobile = isset( $_POST['patient_mobile'] ) ? preg_replace( '/[^0-9+]/', '', $_POST['patient_mobile'] ) : '';
@@ -73,10 +80,12 @@ class CMI_Upload {
 
         if ( empty( $mobile ) && empty( $email ) && empty( $uid ) ) {
             wp_send_json_error( [ 'message' => 'Patient mobile number, email, or unique ID is required.' ] );
+            wp_die();
         }
 
         if ( empty( $_FILES['report_file'] ) || $_FILES['report_file']['error'] !== UPLOAD_ERR_OK ) {
             wp_send_json_error( [ 'message' => 'Please select a valid file to upload.' ] );
+            wp_die();
         }
 
         $file = $_FILES['report_file'];
@@ -96,9 +105,11 @@ class CMI_Upload {
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+            wp_die();
         }
 
         wp_send_json_success( [ 'message' => 'Prescription uploaded successfully.', 'report_id' => $result ] );
+        wp_die();
     }
 }
 

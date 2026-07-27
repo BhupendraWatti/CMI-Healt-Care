@@ -181,10 +181,10 @@ class CMI_SMS_Manager
                         'msg_key' => 'cmi_dlt_welcome_message',
                         'enable_key' => 'cmi_dlt_enable_welcome_user',
                         'type_key' => 'cmi_dlt_type_welcome_user',
-                        'default_tmpl' => '1707170652590376026',
-                        'default_msg' => get_option('cmi_dlt_welcome_message', ''),
+                        'default_tmpl' => '1077037040016332738',
+                        'default_msg' => get_option('cmi_dlt_welcome_message', 'hello {name}, Welcome to CMI HealthCare. Your account has been successfuly created. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{email}', '{mobile}']
+                        'vars' => ['{name}']
                     ],
                     'otp_access' => [
                         'title' => 'Security OTP Verification SMS',
@@ -194,9 +194,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_otp_access',
                         'type_key' => 'cmi_dlt_type_otp_access',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_otp_access', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_otp_access', 'Your CMI HealthCare verification OTP code for logging into your account is {otp}. Valid for 10 minutes. Please do not share this OTP with anyone. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{otp}', '{mobile}']
+                        'vars' => ['{otp}']
                     ]
                 ]
             ],
@@ -212,9 +212,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_booking_confirmed',
                         'type_key' => 'cmi_dlt_type_booking_confirmed',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_booking_confirmed', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_booking_confirmed', 'Hello {name}, your home sample collection for Order #{order_id} is confirmed. Check your patient portal account for collection details. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{order_id}', '{date}', '{slot}', '{partner}']
+                        'vars' => ['{name}', '{order_id}']
                     ],
                     'partner_assigned' => [
                         'title' => 'Job Assigned to Medical Partner (Partner Notice)',
@@ -224,9 +224,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_partner_assigned',
                         'type_key' => 'cmi_dlt_type_partner_assigned',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_partner_assigned', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_partner_assigned', 'Hello {partner_name}, new home collection job Order #{order_id} is assigned to you. Please check your partner portal for details. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{partner_name}', '{patient_name}', '{order_id}', '{date}', '{slot}']
+                        'vars' => ['{partner_name}', '{order_id}']
                     ],
                     'partner_accepted' => [
                         'title' => 'Partner Accepted Assignment (Customer Notice)',
@@ -236,9 +236,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_partner_accepted',
                         'type_key' => 'cmi_dlt_type_partner_accepted',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_partner_accepted', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_partner_accepted', 'Hello {name}, your home collection Order #{order_id} has been accepted by our medical partner. Check account portal for details. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{partner}', '{order_id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{order_id}']
                     ],
                     'reschedule_requested' => [
                         'title' => 'Collection Reschedule Requested (Customer & Partner Notice)',
@@ -248,9 +248,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_reschedule_requested',
                         'type_key' => 'cmi_dlt_type_reschedule_requested',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_reschedule_requested', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_reschedule_requested', 'Hello {name}, your reschedule request for home collection Order #{order_id} has been submitted for approval. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{order_id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{order_id}']
                     ],
                     'reschedule_approved' => [
                         'title' => 'Collection Reschedule Approved (Customer Notice)',
@@ -260,9 +260,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_reschedule_approved',
                         'type_key' => 'cmi_dlt_type_reschedule_approved',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_reschedule_approved', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_reschedule_approved', 'Hello {name}, your home collection Order #{order_id} has been successfully rescheduled. Check your portal for updated slot. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{order_id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{order_id}']
                     ],
                     'report_uploaded' => [
                         'title' => 'Test Report PDF Uploaded & Ready (Customer Notice)',
@@ -272,9 +272,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_report_ready',
                         'type_key' => 'cmi_dlt_type_report_ready',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_report_ready', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_report_ready', 'Hello {name}, your medical test report for Order #{order_id} is ready for download in your patient portal account. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{order_id}', '{test}']
+                        'vars' => ['{name}', '{order_id}']
                     ]
                 ]
             ],
@@ -290,9 +290,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_requested',
                         'type_key' => 'cmi_dlt_type_consultation_requested',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_requested', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_requested', 'Hello {name}, your doctor consultation request #{id} has been received and is being assigned. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{id}']
                     ],
                     'consultation_assigned' => [
                         'title' => 'Doctor Assigned to Consultation (Doctor Notice)',
@@ -302,9 +302,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_assigned',
                         'type_key' => 'cmi_dlt_type_consultation_assigned',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', 'Hello Dr. {doctor_name}, patient consultation #{id} is assigned to you. Please log in to doctor portal for details. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{doctor_name}', '{patient_name}', '{id}', '{date}', '{slot}']
+                        'vars' => ['{doctor_name}', '{id}']
                     ],
                     'consultation_scheduled' => [
                         'title' => 'Doctor Video Consultation Booked / Scheduled',
@@ -314,9 +314,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_scheduled',
                         'type_key' => 'cmi_dlt_type_consultation_scheduled',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', 'Hello {name}, your video consultation #{id} with Dr. {doctor} is scheduled. Log in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{id}', '{doctor}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{id}', '{doctor}']
                     ],
                     'consultation_rescheduled' => [
                         'title' => 'Doctor Consultation Rescheduled',
@@ -326,9 +326,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_rescheduled',
                         'type_key' => 'cmi_dlt_type_consultation_rescheduled',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_rescheduled', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_rescheduled', 'Hello {name}, your doctor consultation #{id} has been rescheduled. Check your account portal for your new slot details. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{id}']
                     ],
                     'prescription_ready' => [
                         'title' => 'Digital Prescription Uploaded / Consultation Completed',
@@ -338,9 +338,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_completed',
                         'type_key' => 'cmi_dlt_type_consultation_completed',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_completed', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_completed', 'Hello {name}, your digital prescription for consultation #{id} has been uploaded. Download it from your patient portal account. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{id}', '{doctor}']
+                        'vars' => ['{name}', '{id}']
                     ],
                     'consultation_missed' => [
                         'title' => 'Doctor Consultation Session Expired / Missed',
@@ -350,9 +350,9 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_missed',
                         'type_key' => 'cmi_dlt_type_consultation_missed',
                         'default_tmpl' => '',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_missed', ''),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_missed', 'Hello {name}, your doctor consultation session #{id} was missed. Please request a new slot via your account portal. Thanks CMI HealthCare.'),
                         'default_type' => 'SERVICE_IMPLICIT',
-                        'vars' => ['{name}', '{id}', '{date}', '{slot}']
+                        'vars' => ['{name}', '{id}']
                     ]
                 ]
             ]
@@ -492,6 +492,7 @@ class CMI_SMS_Manager
 
         $formatted = self::format_mobile($mobile);
         if (!$formatted) {
+            error_log( "CMI SMS [welcome_user] [user_id={$user_id}]: SKIPPED — No valid mobile number found. Raw='{$mobile}'." );
             return false; // Mobile number not yet available/valid
         }
 
@@ -507,7 +508,7 @@ class CMI_SMS_Manager
             'mobile' => $formatted
         ]);
 
-        if ($result) {
+        if (!empty($result['success'])) {
             update_user_meta($user_id, '_cmi_welcome_sms_sent', current_time('mysql'));
             return true;
         }
@@ -530,8 +531,10 @@ class CMI_SMS_Manager
             }
         }
 
-        if (!$event_def)
+        if (!$event_def) {
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: SKIPPED — Event key not found in registry. Check get_categorized_events()." );
             return false;
+        }
 
         $enable_key  = $event_def['enable_key'] ?? ('cmi_dlt_enable_' . $event_key);
         $tmpl_id_key = $event_def['tmpl_id_key'] ?? ('cmi_dlt_tmpl_' . $event_key);
@@ -543,7 +546,8 @@ class CMI_SMS_Manager
             $enabled = 'yes';
         }
         if ($enabled !== 'yes' && $enabled !== '1' && $enabled !== 1 && $enabled !== true) {
-            return false; // Dynamic SMS disabled for this event by admin
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: SKIPPED — Disabled in Admin > CMI Portal > SMS Settings (enable_key={$enable_key})." );
+            return false;
         }
 
         $tmpl_id  = get_option($tmpl_id_key, $event_def['default_tmpl'] ?? '');
@@ -551,15 +555,32 @@ class CMI_SMS_Manager
         $msg_type = get_option($type_key, $event_def['default_type'] ?? 'SERVICE_IMPLICIT');
 
         if (empty($tmpl_id) || empty($msg)) {
-            return false; // Skip sending if DLT template ID or message text is empty
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: SKIPPED — Template ID='" . ($tmpl_id ?: 'EMPTY') . "', Msg='" . (empty($msg) ? 'EMPTY' : 'OK') . "'. Go to Admin > CMI Portal > SMS Settings to configure." );
+            return false;
         }
 
         // Interpolate dynamic placeholders
+        $interpolated = $msg;
         foreach ($placeholders as $key => $val) {
-            $msg = str_replace('{' . $key . '}', (string) $val, $msg);
+            $interpolated = str_replace('{' . $key . '}', (string) $val, $interpolated);
         }
 
-        return self::send_sms($mobile, $msg, $tmpl_id, $msg_type);
+        // Check for un-replaced placeholders — sign of missing data in callers
+        if (preg_match('/\{[a-z_]+\}/', $interpolated, $unreplaced)) {
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: WARNING — Un-replaced placeholder found: " . $unreplaced[0] . ". Placeholders passed: " . implode(', ', array_keys($placeholders)) );
+        }
+
+        $result = self::send_sms($mobile, $interpolated, $tmpl_id, $msg_type);
+
+        if (!empty($result['success'])) {
+            $req_id = $result['request_id'] ?? 'N/A';
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: SENT OK — Airtel Request ID: {$req_id}. Template: {$tmpl_id}." );
+        } else {
+            $reason = $result['message'] ?? 'Unknown Airtel API error';
+            error_log( "CMI SMS [{$event_key}] [{$mobile}]: GATEWAY FAILED — {$reason}. Template: {$tmpl_id}. Body: " . json_encode($result['data'] ?? []) );
+        }
+
+        return $result;
     }
 
     /**
@@ -571,6 +592,7 @@ class CMI_SMS_Manager
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Unauthorized access.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         $target = sanitize_text_field($_POST['target'] ?? 'patients');
@@ -581,6 +603,7 @@ class CMI_SMS_Manager
 
         if (empty($message) || empty($tmpl_id)) {
             wp_send_json_error(['message' => __('DLT Template ID and Message text are required.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         $mobiles = [];
@@ -615,6 +638,7 @@ class CMI_SMS_Manager
 
         if (empty($mobiles)) {
             wp_send_json_error(['message' => __('No valid mobile numbers found for target selection.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         // Chunk into batches of 100
@@ -640,6 +664,7 @@ class CMI_SMS_Manager
             'failed' => $fail_count,
             'errors' => array_unique($errors)
         ]);
+        wp_die();
     }
 
     /**
@@ -651,6 +676,7 @@ class CMI_SMS_Manager
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Unauthorized access.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         $event_key = sanitize_key($_POST['event_key'] ?? '');
@@ -701,6 +727,7 @@ class CMI_SMS_Manager
             'message' => __('SMS Message card saved successfully!', 'cmi-partner-portal'),
             'event_key' => $event_key
         ]);
+        wp_die();
     }
 
     /**
@@ -712,6 +739,7 @@ class CMI_SMS_Manager
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Unauthorized access.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         $event_key = sanitize_key($_POST['event_key'] ?? '');
@@ -720,6 +748,7 @@ class CMI_SMS_Manager
         }
 
         wp_send_json_success(['message' => __('Message card removed successfully.', 'cmi-partner-portal')]);
+        wp_die();
     }
 
     /**
@@ -731,6 +760,7 @@ class CMI_SMS_Manager
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Unauthorized access.', 'cmi-partner-portal')]);
+            wp_die();
         }
 
         update_option('cmi_sms_provider',        sanitize_text_field($_POST['sms_provider'] ?? 'airtel'));
@@ -742,6 +772,7 @@ class CMI_SMS_Manager
         update_option('cmi_airtel_sender_id',   sanitize_text_field($_POST['airtel_sender_id'] ?? 'CMIINF'));
 
         wp_send_json_success(['message' => __('Airtel IQ Gateway Credentials saved successfully!', 'cmi-partner-portal')]);
+        wp_die();
     }
 }
 

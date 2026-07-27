@@ -100,9 +100,10 @@ function cmi_pp_activate() {
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta( $sql );
     
-    // Extend existing column if table exists (for upgrades)
+    // Extend existing columns if table exists (for upgrades / column size fixes)
     if ( $wpdb->get_var( "SHOW TABLES LIKE '$table'" ) === $table ) {
         $wpdb->query( "ALTER TABLE $table MODIFY COLUMN mobile VARCHAR(255) NOT NULL" );
+        $wpdb->query( "ALTER TABLE $table MODIFY COLUMN otp VARCHAR(255) NOT NULL" );
     }
 
     // Create download log table

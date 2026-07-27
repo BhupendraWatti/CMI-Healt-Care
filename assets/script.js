@@ -657,7 +657,7 @@ jQuery(function ($) {
         $('.cmi-auth-toggle-tabs .cmi-tab-btn').removeClass('active');
         $('#cmi-toggle-mobile-otp-btn').addClass('active');
         $('#cmi-email-login-form').hide();
-        $('#cmi-mobile-direct-form').fadeIn(200);
+        $('#cmi-mobile-otp-form').fadeIn(200);
         $('#cmi-auth-msg').hide();
     });
 

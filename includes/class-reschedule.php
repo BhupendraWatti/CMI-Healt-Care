@@ -20,11 +20,13 @@ class CMI_HT_Reschedule {
     public function ajax_request_reschedule() {
         if ( ! check_ajax_referer( 'cmi_pp_nonce', 'nonce', false ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Security check failed. Please refresh the page and try again.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $user_id = get_current_user_id();
         if ( ! $user_id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Please log in to request rescheduling.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $id   = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
@@ -33,18 +35,19 @@ class CMI_HT_Reschedule {
 
         if ( ! $id || empty( $date ) || empty( $slot ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'All rescheduling fields are required.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
-        // Validate date and slot (same-day reschedule check with timezone-aware 3-hour buffer)
+        // Validate date and slot (same-day reschedule check with timezone-aware buffer)
         $today = current_time( 'Y-m-d' );
         if ( $date < $today ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Reschedule date cannot be in the past.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         if ( $date === $today ) {
             $parts = explode( '-', $slot );
             $start_str = ! empty( $parts ) ? trim( $parts[0] ) : '';
-            // Use the same configurable buffer as the doctor consultation booking (defaults to 30 minutes).
             $buffer_minutes = absint( get_option( 'cmi_same_day_buffer_minutes', 30 ) );
             $buffer_seconds = $buffer_minutes * 60;
             if ( $start_str ) {
@@ -60,6 +63,7 @@ class CMI_HT_Reschedule {
                     if ( $slot_start_timestamp < $buffer_later ) {
                         /* translators: %d: number of minutes */
                         wp_send_json_error( [ 'message' => sprintf( esc_html__( 'Same-day collection reschedules require a minimum of %d minutes lead time. Please select a later time slot or a future date.', 'cmi-home-testing' ), $buffer_minutes ) ] );
+                        wp_die();
                     }
                 } catch ( Exception $e ) {
                     // Fallback
@@ -68,10 +72,12 @@ class CMI_HT_Reschedule {
                     if ( $slot_start_timestamp < ( $current_timestamp + $buffer_seconds ) ) {
                         /* translators: %d: number of minutes */
                         wp_send_json_error( [ 'message' => sprintf( esc_html__( 'Same-day collection reschedules require a minimum of %d minutes lead time. Please select a later time slot or a future date.', 'cmi-home-testing' ), $buffer_minutes ) ] );
+                        wp_die();
                     }
                 }
             } else {
                 wp_send_json_error( [ 'message' => esc_html__( 'Invalid time slot format.', 'cmi-home-testing' ) ] );
+                wp_die();
             }
         }
 
@@ -82,11 +88,13 @@ class CMI_HT_Reschedule {
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ) );
         if ( ! $row ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Appointment record not found.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $order = wc_get_order( $row->order_id );
         if ( ! $order || $order->get_customer_id() !== $user_id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized request.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         // Save reschedule request (Admin must approve)
@@ -113,6 +121,7 @@ class CMI_HT_Reschedule {
         } else {
             wp_send_json_error( [ 'message' => esc_html__( 'Database write failed.', 'cmi-home-testing' ) ] );
         }
+        wp_die();
     }
 
     /**
@@ -123,11 +132,13 @@ class CMI_HT_Reschedule {
 
         if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'cmi_manage_reschedules' ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $id = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
         if ( ! $id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Invalid request ID.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         global $wpdb;
@@ -136,10 +147,10 @@ class CMI_HT_Reschedule {
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d AND reschedule_status = 'pending'", $id ) );
         if ( ! $row ) {
             wp_send_json_error( [ 'message' => esc_html__( 'No pending reschedule request found for this ID.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $new_status = ! empty( $row->partner_id ) ? 'rescheduled' : 'pending_assignment';
-        // Apply rescheduling (Update actual date/time, update status, preserve partner_id, reset reschedule_status)
         $update = $wpdb->query( $wpdb->prepare(
             "UPDATE $table SET collection_date = %s, collection_time_slot = %s, status = %s, reschedule_status = 'approved', reschedule_date = NULL, reschedule_time_slot = NULL, updated_at = %s WHERE id = %d AND reschedule_status = 'pending'",
             $row->reschedule_date,
@@ -150,7 +161,6 @@ class CMI_HT_Reschedule {
         ) );
 
         if ( $update !== false ) {
-            // Update order meta as well (HPOS compatible)
             $order = wc_get_order( $row->order_id );
             if ( $order ) {
                 $order->update_meta_data( '_cmi_collection_date', $row->reschedule_date );
@@ -164,6 +174,7 @@ class CMI_HT_Reschedule {
         } else {
             wp_send_json_error( [ 'message' => esc_html__( 'Database write failed.', 'cmi-home-testing' ) ] );
         }
+        wp_die();
     }
 
     /**
@@ -174,11 +185,13 @@ class CMI_HT_Reschedule {
 
         if ( ! current_user_can( 'manage_options' ) && ! current_user_can( 'cmi_manage_reschedules' ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         $id = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
         if ( ! $id ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Invalid request ID.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
         global $wpdb;
@@ -187,9 +200,9 @@ class CMI_HT_Reschedule {
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d AND reschedule_status = 'pending'", $id ) );
         if ( ! $row ) {
             wp_send_json_error( [ 'message' => esc_html__( 'No pending reschedule request found.', 'cmi-home-testing' ) ] );
+            wp_die();
         }
 
-        // Deny rescheduling
         $update = $wpdb->query( $wpdb->prepare(
             "UPDATE $table SET reschedule_status = 'rejected', reschedule_date = NULL, reschedule_time_slot = NULL, updated_at = %s WHERE id = %d AND reschedule_status = 'pending'",
             current_time( 'mysql' ),
@@ -206,5 +219,6 @@ class CMI_HT_Reschedule {
         } else {
             wp_send_json_error( [ 'message' => esc_html__( 'Database write failed.', 'cmi-home-testing' ) ] );
         }
+        wp_die();
     }
 }

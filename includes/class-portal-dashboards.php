@@ -16,9 +16,11 @@ class CMI_Portal_Dashboards {
         add_action( 'wp_ajax_nopriv_cmi_mobile_direct_auth',[ __CLASS__, 'ajax_mobile_direct_auth' ] );
         add_action( 'wp_ajax_cmi_mobile_direct_auth',       [ __CLASS__, 'ajax_mobile_direct_auth' ] );
 
-        // Note: OTP-gated portal auth (ajax_send_portal_otp / ajax_verify_portal_otp) was
-        // removed — DLT OTP template pending Airtel approval. Active auth path: ajax_mobile_direct_auth.
-        // Re-enable when DLT template 'otp_access' is approved by Airtel IQ.
+        // 2-Step Airtel DLT SMS OTP Portal Auth
+        add_action( 'wp_ajax_nopriv_cmi_send_portal_otp',   [ __CLASS__, 'ajax_send_portal_otp' ] );
+        add_action( 'wp_ajax_cmi_send_portal_otp',          [ __CLASS__, 'ajax_send_portal_otp' ] );
+        add_action( 'wp_ajax_nopriv_cmi_verify_portal_otp', [ __CLASS__, 'ajax_verify_portal_otp' ] );
+        add_action( 'wp_ajax_cmi_verify_portal_otp',        [ __CLASS__, 'ajax_verify_portal_otp' ] );
 
         add_action( 'template_redirect',                  [ __CLASS__, 'prevent_caching_on_portals' ] );
     }
@@ -180,12 +182,14 @@ class CMI_Portal_Dashboards {
 
         if ( ! is_email( $email ) || empty( $password ) ) {
             wp_send_json_error( [ 'message' => 'Please enter a valid email and password.' ] );
+            wp_die();
         }
 
         // Get user by email
         $user = get_user_by( 'email', $email );
         if ( ! $user ) {
             wp_send_json_error( [ 'message' => 'Account not found with this email.' ] );
+            wp_die();
         }
 
         // Authenticate – do NOT pass is_ssl() as secure_cookie; WordPress manages
@@ -196,6 +200,7 @@ class CMI_Portal_Dashboards {
 
         if ( is_wp_error( $auth_user ) ) {
             wp_send_json_error( [ 'message' => 'Incorrect password. Please try again.' ] );
+            wp_die();
         }
 
         // Explicitly set auth cookie so session persists after AJAX response
@@ -203,6 +208,7 @@ class CMI_Portal_Dashboards {
         wp_set_auth_cookie( $auth_user->ID, true, is_ssl() );
 
         wp_send_json_success( [ 'message' => 'Login successful. Redirecting...' ] );
+        wp_die();
     }
 
     public static function ajax_register() {
@@ -216,10 +222,12 @@ class CMI_Portal_Dashboards {
 
         if ( empty( $name ) || ! is_email( $email ) || strlen( $password ) < 6 || empty( $mobile ) ) {
             wp_send_json_error( [ 'message' => 'Please fill in all fields correctly. Password must be at least 6 characters.' ] );
+            wp_die();
         }
 
         if ( email_exists( $email ) ) {
             wp_send_json_error( [ 'message' => 'An account with this email address already exists.' ] );
+            wp_die();
         }
 
         // Generate a unique username based on email
@@ -240,6 +248,7 @@ class CMI_Portal_Dashboards {
 
         if ( is_wp_error( $user_id ) ) {
             wp_send_json_error( [ 'message' => $user_id->get_error_message() ] );
+            wp_die();
         }
 
         // Save mobile number, sync billing_phone, and generate a unique patient ID
@@ -294,6 +303,7 @@ class CMI_Portal_Dashboards {
         if ( is_wp_error( $auth_user ) ) {
             // Registration succeeded but auto-login failed — tell user to log in manually.
             wp_send_json_success( [ 'message' => 'Registration successful! Please log in with your credentials.' ] );
+            wp_die();
         }
 
         // Explicitly set auth cookie so session survives the AJAX boundary
@@ -301,6 +311,7 @@ class CMI_Portal_Dashboards {
         wp_set_auth_cookie( $auth_user->ID, true, is_ssl() );
 
         wp_send_json_success( [ 'message' => 'Registration successful. Redirecting...' ] );
+        wp_die();
     }
 
     /**
@@ -320,6 +331,7 @@ class CMI_Portal_Dashboards {
 
         if ( strlen( $mobile ) < 10 ) {
             wp_send_json_error( [ 'message' => __( 'Please enter a valid 10-digit mobile number.', 'cmi-partner-portal' ) ] );
+            wp_die();
         }
 
         $clean_10    = substr( $mobile, -10 );
@@ -382,6 +394,7 @@ class CMI_Portal_Dashboards {
 
         if ( is_wp_error( $user_id ) ) {
             wp_send_json_error( [ 'message' => $user_id->get_error_message() ] );
+            wp_die();
         }
 
         update_user_meta( $user_id, '_cmi_mobile', $norm_mobile );
@@ -411,6 +424,160 @@ class CMI_Portal_Dashboards {
         wp_set_auth_cookie( $user_id, true, is_ssl() );
 
         wp_send_json_success( [ 'message' => __( 'Registration successful! Redirecting...', 'cmi-partner-portal' ) ] );
+        wp_die();
+    }
+
+    /**
+     * AJAX Handler: Send Portal Login / Registration OTP via Airtel IQ DLT SMS API
+     */
+    public static function ajax_send_portal_otp() {
+        check_ajax_referer( 'cmi_pp_nonce', 'nonce' );
+
+        $mobile = preg_replace( '/[^0-9]/', '', $_POST['mobile'] ?? '' );
+        if ( strlen( $mobile ) < 10 ) {
+            wp_send_json_error( [ 'message' => __( 'Please enter a valid 10-digit mobile number.', 'cmi-partner-portal' ) ] );
+            wp_die();
+        }
+
+        $clean_10    = substr( $mobile, -10 );
+        $norm_mobile = CMI_SMS_Manager::format_mobile( $clean_10 );
+
+        if ( ! $norm_mobile ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid mobile number format. Please enter a valid 10-digit Indian mobile number.', 'cmi-partner-portal' ) ] );
+            wp_die();
+        }
+
+        // Verify DLT template is configured before generating OTP
+        $tmpl_id = get_option( 'cmi_dlt_tmpl_otp_access', '' );
+        $dlt_msg = get_option( 'cmi_dlt_msg_otp_access', '' );
+
+        if ( empty( $tmpl_id ) || empty( $dlt_msg ) ) {
+            error_log( "CMI OTP BLOCKED [{$norm_mobile}]: otp_access template not configured. tmpl_id=" . ($tmpl_id ?: 'EMPTY') . " msg=" . (empty($dlt_msg) ? 'EMPTY' : 'OK') );
+            wp_send_json_error( [ 'message' => __( 'OTP service is not configured. Please contact admin to set up DLT Template ID for otp_access in SMS Settings.', 'cmi-partner-portal' ) ] );
+            wp_die();
+        }
+
+        // Generate 6-digit OTP and store in wp_cmi_otp table
+        $otp = CMI_OTP::generate( $norm_mobile );
+
+        // Send OTP via Airtel IQ DLT SMS API
+        $sent = CMI_OTP::send( $norm_mobile, $otp );
+
+        if ( $sent ) {
+            wp_send_json_success( [ 'message' => sprintf( __( 'OTP sent to +91 %s via SMS. Valid for 10 minutes.', 'cmi-partner-portal' ), $clean_10 ) ] );
+        } else {
+            wp_send_json_error( [ 'message' => __( 'Failed to send OTP via Airtel SMS gateway. Please check your DLT Template ID and message in Admin > CMI Portal > SMS Settings, then try again.', 'cmi-partner-portal' ) ] );
+        }
+        wp_die();
+    }
+
+    /**
+     * AJAX Handler: Verify Portal Auth OTP & Log in / Register User
+     */
+    public static function ajax_verify_portal_otp() {
+        check_ajax_referer( 'cmi_pp_nonce', 'nonce' );
+
+        $mobile       = preg_replace( '/[^0-9]/', '', $_POST['mobile'] ?? '' );
+        $otp          = sanitize_text_field( $_POST['otp'] ?? '' );
+        $name         = sanitize_text_field( $_POST['name'] ?? '' );
+        $type         = sanitize_text_field( $_POST['type'] ?? 'patient' );
+        $partner_type = sanitize_text_field( $_POST['partner_type'] ?? 'medical_partner' );
+
+        if ( strlen( $mobile ) < 10 || empty( $otp ) ) {
+            wp_send_json_error( [ 'message' => __( 'Please enter a valid mobile number and 6-digit OTP code.', 'cmi-partner-portal' ) ] );
+            wp_die();
+        }
+
+        $clean_10    = substr( $mobile, -10 );
+        $norm_mobile = CMI_SMS_Manager::format_mobile( $clean_10 );
+
+        // Verify OTP from wp_cmi_otp table
+        if ( ! CMI_OTP::verify( $norm_mobile, $otp ) ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid or expired OTP code. Please try again.', 'cmi-partner-portal' ) ] );
+            wp_die();
+        }
+
+        // OTP Verified successfully! Lookup existing user
+        $user = null;
+        $users_by_meta = get_users([
+            'meta_query' => [
+                'relation' => 'OR',
+                [ 'key' => '_cmi_mobile',   'value' => $norm_mobile ],
+                [ 'key' => '_cmi_mobile',   'value' => $clean_10 ],
+                [ 'key' => 'billing_phone', 'value' => $norm_mobile ],
+                [ 'key' => 'billing_phone', 'value' => $clean_10 ],
+            ],
+            'number' => 1
+        ]);
+
+        if ( ! empty( $users_by_meta ) ) {
+            $user = $users_by_meta[0];
+        } else {
+            $user_by_login = get_user_by( 'login', 'user_' . $clean_10 );
+            if ( $user_by_login ) {
+                $user = $user_by_login;
+            }
+        }
+
+        if ( ! $user ) {
+            // Auto-register new user
+            $username   = 'user_' . $clean_10;
+            $email      = $clean_10 . '@cmihealthcare.in';
+            $first_name = ! empty( $name ) ? $name : ( 'User ' . substr( $clean_10, -4 ) );
+            $user_pass  = wp_generate_password( 16 );
+
+            $user_id = wp_insert_user([
+                'user_login'   => $username,
+                'user_email'   => $email,
+                'user_pass'    => $user_pass,
+                'first_name'   => $first_name,
+                'display_name' => $first_name,
+                'role'         => 'subscriber'
+            ]);
+
+            if ( is_wp_error( $user_id ) ) {
+                wp_send_json_error( [ 'message' => $user_id->get_error_message() ] );
+                wp_die();
+            }
+
+            update_user_meta( $user_id, '_cmi_mobile', $norm_mobile );
+            update_user_meta( $user_id, 'billing_phone', $norm_mobile );
+            $uid = 'CMI' . strtoupper( wp_generate_password( 6, false ) );
+            update_user_meta( $user_id, '_cmi_uid', $uid );
+
+            if ( $type === 'partner' ) {
+                $allowed_types = [ 'medical_partner', 'cmi_doctor' ];
+                if ( ! in_array( $partner_type, $allowed_types, true ) ) {
+                    $partner_type = 'medical_partner';
+                }
+
+                $u = new WP_User( $user_id );
+                $u->set_role( $partner_type );
+                update_user_meta( $user_id, '_cmi_partner_type', $partner_type );
+                update_user_meta( $user_id, '_cmi_approved', current_time( 'mysql' ) );
+            }
+
+            // Dispatch Welcome SMS upon registration
+            if ( class_exists( 'CMI_SMS_Manager' ) ) {
+                CMI_SMS_Manager::maybe_send_welcome_sms( $user_id, $norm_mobile );
+            }
+
+            $user = get_userdata( $user_id );
+        } else {
+            // Existing user: ensure mobile meta is set
+            update_user_meta( $user->ID, '_cmi_mobile', $norm_mobile );
+            update_user_meta( $user->ID, 'billing_phone', $norm_mobile );
+            if ( class_exists( 'CMI_SMS_Manager' ) ) {
+                CMI_SMS_Manager::maybe_send_welcome_sms( $user->ID, $norm_mobile );
+            }
+        }
+
+        // Set Auth Cookie
+        wp_set_current_user( $user->ID );
+        wp_set_auth_cookie( $user->ID, true, is_ssl() );
+
+        wp_send_json_success( [ 'message' => sprintf( __( 'OTP verified! Welcome %s. Redirecting...', 'cmi-partner-portal' ), $user->display_name ) ] );
+        wp_die();
     }
 
     public static function prevent_caching_on_portals() {
