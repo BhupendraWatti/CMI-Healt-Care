@@ -50,16 +50,42 @@ require_once CMI_PP_PATH . 'includes/class-notifications.php';
 require_once CMI_PP_PATH . 'includes/class-shortcodes.php';
 require_once CMI_PP_PATH . 'includes/class-consultations.php';
 
-// Override WooCommerce My Account Login/Register Form with CMI Healthcare Card UI (https://cmihealthcare.in/my-account/)
+// Override WooCommerce My Account & Checkout Login/Register Templates with CMI Healthcare Card UI
 add_filter( 'woocommerce_locate_template', 'cmi_override_wc_login_template', 10, 3 );
 function cmi_override_wc_login_template( $template, $template_name, $template_path ) {
-    if ( $template_name === 'myaccount/form-login.php' ) {
+    if ( in_array( $template_name, [ 'myaccount/form-login.php', 'checkout/form-login.php', 'global/form-login.php' ], true ) ) {
         $custom_template = CMI_PP_PATH . 'templates/wc-form-login.php';
         if ( file_exists( $custom_template ) ) {
             return $custom_template;
         }
     }
     return $template;
+}
+
+// Redirect unauthenticated checkout users to custom /my-account/ login page with return URL
+add_action( 'template_redirect', 'cmi_redirect_unauthenticated_checkout_user' );
+function cmi_redirect_unauthenticated_checkout_user() {
+    if ( function_exists( 'is_checkout' ) && is_checkout() && ! is_user_logged_in() && ! is_wc_endpoint_url( 'order-received' ) ) {
+        if ( get_option( 'woocommerce_enable_guest_checkout' ) === 'no' ) {
+            $myaccount_id    = get_option( 'woocommerce_myaccount_page_id' );
+            $myaccount_url   = $myaccount_id ? get_permalink( $myaccount_id ) : home_url( '/my-account/' );
+            $checkout_url    = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/checkout/' );
+            $redirect_target = add_query_arg( 'redirect_to', urlencode( $checkout_url ), $myaccount_url );
+            wp_safe_redirect( $redirect_target );
+            exit;
+        }
+    }
+}
+
+// Filter default WP/WC login URLs to point to custom /my-account/ page
+add_filter( 'login_url', 'cmi_redirect_wp_login_url', 10, 3 );
+function cmi_redirect_wp_login_url( $login_url, $redirect, $force_reauth ) {
+    $myaccount_id  = get_option( 'woocommerce_myaccount_page_id' );
+    $myaccount_url = $myaccount_id ? get_permalink( $myaccount_id ) : home_url( '/my-account/' );
+    if ( ! empty( $redirect ) ) {
+        return add_query_arg( 'redirect_to', urlencode( $redirect ), $myaccount_url );
+    }
+    return $myaccount_url;
 }
 
 

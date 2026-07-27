@@ -12,8 +12,14 @@ jQuery(function ($) {
         return defaultMsg || 'Action failed.';
     }
 
-    // Helper to reload with a cache-buster query parameter to bypass page caches
+    // Helper to reload or redirect to redirect_to URL after successful auth
     function reloadWithCacheBuster() {
+        var urlParams = new URLSearchParams(window.location.search);
+        var redirectTo = urlParams.get('redirect_to') || urlParams.get('redirect');
+        if (redirectTo) {
+            window.location.href = decodeURIComponent(redirectTo);
+            return;
+        }
         var href = window.location.href;
         var cb = 'cb=' + Date.now();
         if (href.indexOf('cb=') > -1) {
