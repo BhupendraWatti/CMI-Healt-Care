@@ -808,28 +808,34 @@ class CMI_HT_Notifications {
     /**
      * Doctor Consultation scheduling methods
      */
+    /**
+     * FIX: Bypass WP-Cron loopback for all consultation events.
+     * Call notify handlers directly (same pattern as schedule_partner_revoked).
+     * WP-Cron loopback failures on firewalled/local servers caused all consultation
+     * notifications (email + SMS) to be silently delayed or never fired.
+     */
     public function schedule_consultation_requested( $id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_requested', [ $id ] );
+        $this->notify_consultation_requested( $id );
     }
 
     public function schedule_consultation_assigned( $id, $doctor_id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_assigned', [ $id, $doctor_id ] );
+        $this->notify_consultation_assigned( $id, $doctor_id );
     }
 
     public function schedule_consultation_scheduled( $id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_scheduled', [ $id ] );
+        $this->notify_consultation_scheduled( $id );
     }
 
     public function schedule_consultation_completed( $id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_completed', [ $id ] );
+        $this->notify_consultation_completed( $id );
     }
 
     public function schedule_consultation_cancelled( $id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_cancelled', [ $id ] );
+        $this->notify_consultation_cancelled( $id );
     }
 
     public function schedule_consultation_needs_reschedule( $id ) {
-        wp_schedule_single_event( time(), 'cmi_deferred_notify_consultation_needs_reschedule', [ $id ] );
+        $this->notify_consultation_needs_reschedule( $id );
     }
  
     /**
@@ -916,8 +922,11 @@ class CMI_HT_Notifications {
         }
 
         // Transactional SMS trigger to Patient
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_requested', $row->patient_mobile, [
+        // FIX: Multi-tier mobile fallback: patient_mobile column → _cmi_mobile usermeta → billing_phone usermeta
+        $patient_mobile = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile ) ) {
+            CMI_SMS_Manager::send_event_sms( 'consultation_requested', $patient_mobile, [
                 'name' => $row->patient_name,
                 'id'   => $id,
                 'date' => $row->preferred_date,
@@ -1013,6 +1022,7 @@ class CMI_HT_Notifications {
         }
 
         // Transactional SMS trigger to Doctor & Patient
+        // FIX: Fallback for doctor phone (_cmi_mobile → billing_phone)
         $doctor_phone = get_user_meta( $doctor_id, '_cmi_mobile', true ) ?: get_user_meta( $doctor_id, 'billing_phone', true );
         if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $doctor_phone ) ) {
             CMI_SMS_Manager::send_event_sms( 'consultation_assigned', $doctor_phone, [
@@ -1023,8 +1033,11 @@ class CMI_HT_Notifications {
                 'slot'         => $row->preferred_time_slot
             ] );
         }
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $row->patient_mobile, [
+        // FIX: Multi-tier mobile fallback for patient
+        $patient_mobile_assigned = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_assigned ) ) {
+            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $patient_mobile_assigned, [
                 'name'   => $row->patient_name,
                 'id'     => $id,
                 'doctor' => $doctor->display_name,
@@ -1080,8 +1093,11 @@ class CMI_HT_Notifications {
         wp_mail( $to, $subject, $html_message, $headers );
 
         // Transactional SMS trigger to Patient
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $row->patient_mobile, [
+        // FIX: Multi-tier mobile fallback: patient_mobile → _cmi_mobile usermeta → billing_phone usermeta
+        $patient_mobile_sched = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_sched ) ) {
+            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $patient_mobile_sched, [
                 'name'   => $row->patient_name,
                 'id'     => $id,
                 'doctor' => $doctor_name,
@@ -1145,8 +1161,11 @@ class CMI_HT_Notifications {
         wp_mail( $to, $subject, $html_message, $headers );
 
         // Transactional SMS trigger to Patient
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'prescription_ready', $row->patient_mobile, [
+        // FIX: Multi-tier mobile fallback: patient_mobile → _cmi_mobile usermeta → billing_phone usermeta
+        $patient_mobile_comp = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_comp ) ) {
+            CMI_SMS_Manager::send_event_sms( 'prescription_ready', $patient_mobile_comp, [
                 'name'   => $row->patient_name,
                 'id'     => $id,
                 'doctor' => $doctor_name
@@ -1277,8 +1296,11 @@ class CMI_HT_Notifications {
         wp_mail( $to, $subject, $html_message, $headers );
 
         // Transactional SMS trigger to Patient
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_missed', $row->patient_mobile, [
+        // FIX: Multi-tier mobile fallback: patient_mobile → _cmi_mobile usermeta → billing_phone usermeta
+        $patient_mobile_missed = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_missed ) ) {
+            CMI_SMS_Manager::send_event_sms( 'consultation_missed', $patient_mobile_missed, [
                 'name' => $row->patient_name,
                 'id'   => $id,
                 'date' => $row->preferred_date,
@@ -1326,8 +1348,11 @@ class CMI_HT_Notifications {
             wp_mail( $to_patient, $subject_patient, $html_message_patient, $headers );
 
             // Transactional SMS trigger to Patient
-            if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $row->patient_mobile ) ) {
-                CMI_SMS_Manager::send_event_sms( 'consultation_rescheduled', $row->patient_mobile, [
+            // FIX: Multi-tier mobile fallback: patient_mobile → _cmi_mobile usermeta → billing_phone usermeta
+            $patient_mobile_resched = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+                : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
+            if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_resched ) ) {
+                CMI_SMS_Manager::send_event_sms( 'consultation_rescheduled', $patient_mobile_resched, [
                     'name' => $row->patient_name,
                     'id'   => $id,
                     'date' => $row->preferred_date,

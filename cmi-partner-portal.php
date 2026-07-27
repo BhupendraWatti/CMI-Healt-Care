@@ -3,7 +3,7 @@
  * Plugin Name: CMI Partner Portal
  * Plugin URI:  https://cmihealthcare.in
  * Description: Partner login, report upload/download, prescriptions and guest report access for CMI Healthcare.
- * Version:     1.0.20
+ * Version:     1.0.21
  * Author:      CMI Healthcare
  * Text Domain: cmi-partner-portal
  */
@@ -33,6 +33,9 @@ require_once CMI_PP_PATH . 'includes/class-cpt.php';
 require_once CMI_PP_PATH . 'includes/class-upload.php';
 require_once CMI_PP_PATH . 'includes/class-download.php';
 require_once CMI_PP_PATH . 'includes/class-sms.php';
+require_once CMI_PP_PATH . 'includes/class-sms-trigger-registry.php';
+require_once CMI_PP_PATH . 'includes/class-sms-context-resolver.php';
+require_once CMI_PP_PATH . 'includes/class-sms-listener.php';
 require_once CMI_PP_PATH . 'includes/class-portal-dashboards.php';
 require_once CMI_PP_PATH . 'includes/class-guest-access.php';
 require_once CMI_PP_PATH . 'includes/class-admin.php';
