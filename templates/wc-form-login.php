@@ -9,6 +9,7 @@
  * - Secondary Auth Modes: Direct Mobile Auth & Email + Password Login.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
+if ( is_user_logged_in() ) return;
 ?>
 
 <div class="cmi-wc-auth-wrapper" id="cmi-auth-container" data-type="patient" style="display: flex; justify-content: center; align-items: center; min-height: 480px; padding: 40px 15px; background: #f8fafc;">

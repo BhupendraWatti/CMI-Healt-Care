@@ -61,7 +61,10 @@ if ( taxonomy_exists( 'cmi_report_type' ) ) {
 
                         // Fetch patient snapshot details if they exist, fallback to billing details
                         $patient_name   = $order->get_meta( '_cmi_patient_name' ) ?: ( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
-                        $patient_phone  = $order->get_meta( '_cmi_patient_mobile' ) ?: $order->get_billing_phone();
+                        $cmi_mob        = $order->get_meta( '_cmi_patient_mobile' );
+                        $bill_mob       = $order->get_billing_phone();
+                        $patient_phone  = ! empty( $cmi_mob ) ? $cmi_mob : $bill_mob;
+                        $phone_subtext  = ( ! empty( $cmi_mob ) && ! empty( $bill_mob ) && $cmi_mob !== $bill_mob ) ? ' (Billing: ' . $bill_mob . ')' : '';
                         $patient_email  = $order->get_billing_email();
                         $patient_gender = $order->get_meta( '_cmi_patient_gender' ) ?: 'Unspecified';
                         $patient_dob    = $order->get_meta( '_cmi_patient_dob' ) ?: '—';
@@ -77,7 +80,7 @@ if ( taxonomy_exists( 'cmi_report_type' ) ) {
                             <td style="font-weight:600;">#<?php echo esc_html( $row->order_id ); ?></td>
                             <td>
                                 <strong><?php echo esc_html( $patient_name ); ?></strong><br>
-                                <span style="font-size:12px; color:var(--cmi-text-muted);"><?php echo esc_html( $patient_phone ); ?></span><br>
+                                <span style="font-size:12px; color:var(--cmi-text-muted);"><?php echo esc_html( $patient_phone . $phone_subtext ); ?></span><br>
                                 <span style="font-size:12px; color:var(--cmi-text-muted);"><?php echo esc_html( $patient_email ); ?></span>
                                 <?php if ( 'Self' !== $patient_rel && ! empty( $patient_rel ) ) : ?>
                                     <div style="margin-top: 6px;">

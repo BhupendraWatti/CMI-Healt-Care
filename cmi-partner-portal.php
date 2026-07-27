@@ -50,10 +50,10 @@ require_once CMI_PP_PATH . 'includes/class-notifications.php';
 require_once CMI_PP_PATH . 'includes/class-shortcodes.php';
 require_once CMI_PP_PATH . 'includes/class-consultations.php';
 
-// Override WooCommerce My Account & Checkout Login/Register Templates with CMI Healthcare Card UI
+// Override WooCommerce My Account Login/Register Template with CMI Healthcare Card UI
 add_filter( 'woocommerce_locate_template', 'cmi_override_wc_login_template', 10, 3 );
 function cmi_override_wc_login_template( $template, $template_name, $template_path ) {
-    if ( in_array( $template_name, [ 'myaccount/form-login.php', 'checkout/form-login.php', 'global/form-login.php' ], true ) ) {
+    if ( $template_name === 'myaccount/form-login.php' && ! is_user_logged_in() ) {
         $custom_template = CMI_PP_PATH . 'templates/wc-form-login.php';
         if ( file_exists( $custom_template ) ) {
             return $custom_template;

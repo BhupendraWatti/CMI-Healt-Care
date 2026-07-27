@@ -693,6 +693,14 @@ class CMI_Consultations {
                             </div>
                         </div>
 
+                        <!-- Patient Mobile Number -->
+                        <div class="cmi-shadcn-form-row">
+                            <label class="cmi-shadcn-label"><?php esc_html_e( 'Mobile Number (For SMS & Meeting Updates)', 'cmi-partner-portal' ); ?> *</label>
+                            <input type="tel" name="patient_mobile" id="cmi_consult_patient_mobile" class="cmi-shadcn-input" 
+                                   value="<?php echo esc_attr( get_user_meta( get_current_user_id(), '_cmi_mobile', true ) ?: get_user_meta( get_current_user_id(), 'billing_phone', true ) ); ?>" 
+                                   placeholder="10-digit mobile number" maxlength="15" required>
+                        </div>
+
                         <!-- Doctor Select -->
                         <div class="cmi-shadcn-form-row">
                             <label class="cmi-shadcn-label"><?php esc_html_e( 'Preferred Doctor', 'cmi-partner-portal' ); ?> *</label>
@@ -1255,6 +1263,16 @@ class CMI_Consultations {
             }
         }
 
+        // Resolve patient mobile number (POST field -> member record -> usermeta fallback)
+        $posted_mobile  = isset( $_POST['patient_mobile'] ) ? sanitize_text_field( $_POST['patient_mobile'] ) : '';
+        $patient_mobile = ! empty( $posted_mobile ) ? $posted_mobile
+            : ( ! empty( $member->mobile ) ? $member->mobile
+                : ( get_user_meta( $user_id, '_cmi_mobile', true ) ?: get_user_meta( $user_id, 'billing_phone', true ) ) );
+
+        if ( ! empty( $patient_mobile ) && empty( get_user_meta( $user_id, '_cmi_mobile', true ) ) ) {
+            update_user_meta( $user_id, '_cmi_mobile', $patient_mobile );
+        }
+
         // Insert inside the open transaction.
         $result = $wpdb->insert(
             $table,
@@ -1265,7 +1283,7 @@ class CMI_Consultations {
                 'patient_gender'       => $member->gender,
                 'patient_dob'          => $member->dob,
                 'patient_relationship' => $member->relationship,
-                'patient_mobile'       => $member->mobile,
+                'patient_mobile'       => $patient_mobile,
                 'consultation_type'    => $consultation_type,
                 'symptoms'             => $symptoms,
                 'preferred_date'       => $preferred_date,
