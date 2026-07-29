@@ -1021,30 +1021,9 @@ class CMI_HT_Notifications {
             wp_mail( $to_patient, $subject_patient, $html_message_patient, $headers );
         }
 
-        // Transactional SMS trigger to Doctor & Patient
-        // FIX: Fallback for doctor phone (_cmi_mobile → billing_phone)
-        $doctor_phone = get_user_meta( $doctor_id, '_cmi_mobile', true ) ?: get_user_meta( $doctor_id, 'billing_phone', true );
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $doctor_phone ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_assigned', $doctor_phone, [
-                'doctor_name'  => $doctor->display_name,
-                'patient_name' => $row->patient_name,
-                'id'           => $id,
-                'date'         => $row->preferred_date,
-                'slot'         => $row->preferred_time_slot
-            ] );
-        }
-        // FIX: Multi-tier mobile fallback for patient
-        $patient_mobile_assigned = ! empty( $row->patient_mobile ) ? $row->patient_mobile
-            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_assigned ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $patient_mobile_assigned, [
-                'name'   => $row->patient_name,
-                'id'     => $id,
-                'doctor' => $doctor->display_name,
-                'date'   => $row->preferred_date,
-                'slot'   => $row->preferred_time_slot
-            ] );
-        }
+        // NOTE: Transactional SMS for consultation_assigned and consultation_scheduled
+        // are dispatched exclusively by CMI_SMS_Listener via do_action('cmi_consultation_assigned').
+        // Direct SMS calls have been removed here to prevent dual dispatch (RC-1 fix).
     }
 
     public function notify_consultation_scheduled( $id ) {
@@ -1092,19 +1071,9 @@ class CMI_HT_Notifications {
         $headers = [ 'Content-Type: text/html; charset=UTF-8' ];
         wp_mail( $to, $subject, $html_message, $headers );
 
-        // Transactional SMS trigger to Patient
-        // FIX: Multi-tier mobile fallback: patient_mobile → _cmi_mobile usermeta → billing_phone usermeta
-        $patient_mobile_sched = ! empty( $row->patient_mobile ) ? $row->patient_mobile
-            : ( get_user_meta( $row->user_id, '_cmi_mobile', true ) ?: get_user_meta( $row->user_id, 'billing_phone', true ) );
-        if ( class_exists( 'CMI_SMS_Manager' ) && ! empty( $patient_mobile_sched ) ) {
-            CMI_SMS_Manager::send_event_sms( 'consultation_scheduled', $patient_mobile_sched, [
-                'name'   => $row->patient_name,
-                'id'     => $id,
-                'doctor' => $doctor_name,
-                'date'   => $row->preferred_date,
-                'slot'   => $row->preferred_time_slot
-            ] );
-        }
+        // NOTE: Transactional SMS for consultation_scheduled is dispatched exclusively by
+        // CMI_SMS_Listener via do_action('cmi_consultation_scheduled').
+        // Direct SMS call removed here to eliminate dual dispatch (RC-1 fix).
     }
 
     public function notify_consultation_completed( $id ) {

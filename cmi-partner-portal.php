@@ -3,7 +3,7 @@
  * Plugin Name: CMI Partner Portal
  * Plugin URI:  https://cmihealthcare.in
  * Description: Partner login, report upload/download, prescriptions and guest report access for CMI Healthcare.
- * Version:     1.0.21
+ * Version:     1.0.22
  * Author:      CMI Healthcare
  * Text Domain: cmi-partner-portal
  */
@@ -22,7 +22,7 @@ function cmi_pp_conflict_notice() {
     echo '</div>';
 }
 
-define( 'CMI_PP_VERSION', '1.0.21' );
+define( 'CMI_PP_VERSION', '1.0.22' );
 define( 'CMI_PP_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'CMI_PP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'CMI_PP_UPLOAD_DIR', WP_CONTENT_DIR . '/cmi-secure-reports' );
@@ -207,11 +207,26 @@ function cmi_pp_enqueue_scripts() {
 
     wp_enqueue_style( 'cmi-pp-style', $plugin_url . 'assets/style.css', [], CMI_PP_VERSION );
     wp_enqueue_script( 'cmi-pp-script', $plugin_url . 'assets/script.js', ['jquery'], CMI_PP_VERSION, true );
+    // Determine current user role for frontend tab scoping
+    $current_user_id = get_current_user_id();
+    $user_role       = 'guest';
+    if ( $current_user_id ) {
+        if ( CMI_Roles::is_doctor() ) {
+            $user_role = 'doctor';
+        } elseif ( user_can( $current_user_id, 'cmi_view_assignments' ) ) {
+            $user_role = 'partner';
+        } else {
+            $user_role = 'patient';
+        }
+    }
+
     wp_localize_script( 'cmi-pp-script', 'cmiPP', [
         'ajaxurl'        => $ajax_url,
         'nonce'          => wp_create_nonce( 'cmi_pp_nonce' ),
         'isDoctor'       => is_user_logged_in() && CMI_Roles::is_doctor(),
         'sameDayBuffer'  => absint( get_option( 'cmi_same_day_buffer_minutes', 30 ) ),
+        'userId'         => $current_user_id,
+        'userRole'       => $user_role,
     ]);
 }
 

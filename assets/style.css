@@ -564,3 +564,49 @@ small {
         height: 100% !important;
     }
 }
+
+/* ── Theme-Agnostic Auth Wrapper Containment ──────────────────────────────
+   Prevents WooCommerce themes (Astra, Storefront, Woodmart, Hello Elementor, etc.)
+   from applying float:right / grid constraints to .woocommerce-MyAccount-content
+   when CMI's login card is being rendered. Fixes right-side displacement on hard refresh. */
+.cmi-wc-auth-wrapper {
+    clear: both !important;
+    float: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-height: 480px;
+    padding: 40px 15px;
+    background: #f8fafc;
+    box-sizing: border-box;
+}
+
+/* ── Dashboard Wrapper Theme Resets ────────────────────────────────────────
+   Ensure patient/partner dashboard wrappers are always full-width and un-floated
+   regardless of active WooCommerce theme container rules. */
+.cmi-patient-dashboard-wrapper,
+.cmi-partner-dashboard-wrapper {
+    clear: both;
+    float: none;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 20px 0;
+    font-family: inherit;
+}
+
+/* ── FOUC Guard: Tab Content During Initial Paint ───────────────────────────
+   .cmi-dashboard-tab-content items with no inline style default to hidden.
+   PHP sets active content to style="" (empty string) and inactive to style="display:none;".
+   This CSS rule ensures inactive tabs are always hidden regardless of JS timing.
+   Active tab content (inline style="") is matched by the second rule and shown. */
+.cmi-dashboard-tab-content[style="display: none;"],
+.cmi-dashboard-tab-content[style="display:none;"] {
+    display: none !important;
+}
+.cmi-dashboard-tab-content[style=""] {
+    display: block !important;
+}
+

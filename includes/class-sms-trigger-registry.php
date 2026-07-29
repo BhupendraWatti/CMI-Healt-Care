@@ -18,15 +18,36 @@ class CMI_SMS_Trigger_Registry {
      *
      * @return array Array of trigger definition arrays.
      */
+    /**
+     * Schema version for trigger registry. Increment when default trigger values change
+     * (e.g. recipient_type or async fixes) to force DB reset on existing installs.
+     */
+    private static $schema_version = 4; // Synchronous real-time SMS dispatch (no WP-Cron dependence)
+
     public static function get_all_triggers() {
-        $saved = get_option(self::$option_key, false);
-        if (is_array($saved) && !empty($saved)) {
-            return $saved;
+        $saved          = get_option(self::$option_key, false);
+        $saved_version  = (int) get_option(self::$option_key . '_schema_ver', 0);
+        $defaults       = self::get_default_triggers();
+
+        // Force reset if schema version mismatch — ensures synchronous dispatch applies to existing DB data
+        if (!is_array($saved) || empty($saved) || $saved_version < self::$schema_version) {
+            update_option(self::$option_key, $defaults);
+            update_option(self::$option_key . '_schema_ver', self::$schema_version);
+            return $defaults;
         }
 
-        $defaults = self::get_default_triggers();
-        update_option(self::$option_key, $defaults);
-        return $defaults;
+        // Merge defaults so new triggers are always present even if database has an older saved array
+        $merged = false;
+        foreach ($defaults as $id => $def) {
+            if (!isset($saved[$id])) {
+                $saved[$id] = $def;
+                $merged = true;
+            }
+        }
+        if ($merged) {
+            update_option(self::$option_key, $saved);
+        }
+        return $saved;
     }
 
     /**
@@ -61,6 +82,20 @@ class CMI_SMS_Trigger_Registry {
                 'enabled'        => 'yes',
                 'async'          => 'no',
             ],
+            'trig_consultation_requested' => [
+                'trigger_id'     => 'trig_consultation_requested',
+                'title'          => __('Doctor Consultation Requested (Patient Notice)', 'cmi-partner-portal'),
+                'desc'           => __('Fired when a patient submits a new doctor consultation request.', 'cmi-partner-portal'),
+                'hook_name'      => 'cmi_consultation_requested',
+                'hook_priority'  => 10,
+                'accepted_args'  => 1,
+                'template_key'   => 'consultation_requested',
+                'recipient_type' => 'consultation_patient',
+                'arg_position'   => 1,
+                'resolver'       => 'consultation',
+                'enabled'        => 'yes',
+                'async'          => 'no',
+            ],
             'trig_consultation_scheduled' => [
                 'trigger_id'     => 'trig_consultation_scheduled',
                 'title'          => __('Doctor Video Consultation Booked/Scheduled', 'cmi-partner-portal'),
@@ -77,13 +112,55 @@ class CMI_SMS_Trigger_Registry {
             ],
             'trig_consultation_assigned' => [
                 'trigger_id'     => 'trig_consultation_assigned',
-                'title'          => __('Doctor Assigned to Consultation (Doctor Notice)', 'cmi-partner-portal'),
-                'desc'           => __('Fired when admin assigns a doctor to an existing consultation session.', 'cmi-partner-portal'),
+                'title'          => __('Doctor Assigned to Consultation (Patient Notice)', 'cmi-partner-portal'),
+                'desc'           => __('Fired when admin assigns a doctor — notifies the patient via DLT SMS.', 'cmi-partner-portal'),
                 'hook_name'      => 'cmi_consultation_assigned',
                 'hook_priority'  => 10,
                 'accepted_args'  => 2,
                 'template_key'   => 'consultation_assigned',
-                'recipient_type' => 'consultation_doctor',
+                'recipient_type' => 'consultation_patient',
+                'arg_position'   => 1,
+                'resolver'       => 'consultation',
+                'enabled'        => 'yes',
+                'async'          => 'no',
+            ],
+            'trig_consultation_rescheduled' => [
+                'trigger_id'     => 'trig_consultation_rescheduled',
+                'title'          => __('Doctor Consultation Rescheduled', 'cmi-partner-portal'),
+                'desc'           => __('Fired when admin or doctor reschedules a consultation date/time slot.', 'cmi-partner-portal'),
+                'hook_name'      => 'cmi_consultation_rescheduled_by_admin',
+                'hook_priority'  => 10,
+                'accepted_args'  => 1,
+                'template_key'   => 'consultation_rescheduled',
+                'recipient_type' => 'consultation_patient',
+                'arg_position'   => 1,
+                'resolver'       => 'consultation',
+                'enabled'        => 'yes',
+                'async'          => 'no',
+            ],
+            'trig_consultation_missed' => [
+                'trigger_id'     => 'trig_consultation_missed',
+                'title'          => __('Doctor Consultation Session Expired / Missed', 'cmi-partner-portal'),
+                'desc'           => __('Fired when a consultation session is marked as missed or expired.', 'cmi-partner-portal'),
+                'hook_name'      => 'cmi_consultation_missed',
+                'hook_priority'  => 10,
+                'accepted_args'  => 1,
+                'template_key'   => 'consultation_missed',
+                'recipient_type' => 'consultation_patient',
+                'arg_position'   => 1,
+                'resolver'       => 'consultation',
+                'enabled'        => 'yes',
+                'async'          => 'no',
+            ],
+            'trig_consultation_completed' => [
+                'trigger_id'     => 'trig_consultation_completed',
+                'title'          => __('Digital Prescription Uploaded / Consultation Completed', 'cmi-partner-portal'),
+                'desc'           => __('Fired when doctor completes session and uploads digital prescription PDF.', 'cmi-partner-portal'),
+                'hook_name'      => 'cmi_consultation_completed',
+                'hook_priority'  => 10,
+                'accepted_args'  => 1,
+                'template_key'   => 'prescription_ready',
+                'recipient_type' => 'consultation_patient',
                 'arg_position'   => 1,
                 'resolver'       => 'consultation',
                 'enabled'        => 'yes',

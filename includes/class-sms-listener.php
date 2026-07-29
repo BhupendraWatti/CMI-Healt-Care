@@ -54,6 +54,17 @@ class CMI_SMS_Listener {
             return;
         }
 
+        // RC-1/RC-3 Deduplication Guard: prevent accidental double-click within 5 seconds for same ID
+        $primary_arg_val = intval($raw_args[max(0, $arg_position - 1)] ?? 0);
+        if ($primary_arg_val > 0) {
+            $dedup_key = 'cmi_sms_dedup_' . md5($trigger_id . '_' . $primary_arg_val);
+            if (get_transient($dedup_key)) {
+                error_log("CMI SMS Listener [{$trigger_id}]: SKIPPED — Duplicate dispatch lock active for ID={$primary_arg_val}.");
+                return;
+            }
+            set_transient($dedup_key, 1, 5); // 5-second dedup window
+        }
+
         // Resolve context (placeholders and recipient phone)
         $resolved = CMI_SMS_Context_Resolver::resolve($resolver_type, $recipient_type, $raw_args, $arg_position);
 

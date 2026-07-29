@@ -124,7 +124,7 @@ class CMI_SMS_Manager
                 'Accept' => 'application/json',
             ],
             'body' => json_encode($payload),
-            'timeout' => 15,
+            'timeout' => 8, // RC-4: reduced from 15s — fast failure detection, admin response stays snappy
         ]);
 
         if (is_wp_error($response)) {
@@ -304,7 +304,7 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_assigned',
                         'type_key' => 'cmi_dlt_type_consultation_assigned',
                         'default_tmpl' => '1077191330019642880',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', "Hello {name}, your video consultation {id} with Dr.  {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', "Hello {name}, your video consultation {id} with Dr. {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
                         'default_type' => 'SERVICE_IMPLICIT',
                         'vars' => ['{name}', '{id}', '{doctor}']
                     ],
@@ -316,7 +316,7 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_scheduled',
                         'type_key' => 'cmi_dlt_type_consultation_scheduled',
                         'default_tmpl' => '1077191330019642880',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', "Hello {name}, your video consultation {id} with Dr.  {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', "Hello {name}, your video consultation {id} with Dr. {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
                         'default_type' => 'SERVICE_IMPLICIT',
                         'vars' => ['{name}', '{id}', '{doctor}']
                     ],

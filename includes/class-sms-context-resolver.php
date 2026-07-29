@@ -59,8 +59,9 @@ class CMI_SMS_Context_Resolver {
                         $patient = get_userdata($user_id);
                         $doctor  = !empty($row->doctor_id) ? get_userdata($row->doctor_id) : null;
 
-                        $patient_name = $patient ? $patient->display_name : ($row->patient_name ?? __('Patient', 'cmi-partner-portal'));
-                        $doctor_name  = $doctor ? 'Dr. ' . $doctor->display_name : __('Doctor', 'cmi-partner-portal');
+                        $patient_name = !empty($row->patient_name) ? $row->patient_name : ($patient ? $patient->display_name : __('Patient', 'cmi-partner-portal'));
+                        $doctor_display_name = $doctor ? preg_replace('/^Dr\.\s*/i', '', $doctor->display_name) : __('Doctor', 'cmi-partner-portal');
+                        $doctor_full_title   = $doctor ? (strpos($doctor->display_name, 'Dr.') === 0 ? $doctor->display_name : 'Dr. ' . $doctor->display_name) : __('Doctor', 'cmi-partner-portal');
 
                         $patient_mobile = !empty($row->patient_mobile) ? $row->patient_mobile : (get_user_meta($user_id, '_cmi_mobile', true) ?: get_user_meta($user_id, 'billing_phone', true));
                         $doctor_mobile  = $doctor ? (get_user_meta($row->doctor_id, '_cmi_mobile', true) ?: get_user_meta($row->doctor_id, 'billing_phone', true)) : '';
@@ -75,8 +76,8 @@ class CMI_SMS_Context_Resolver {
                             'id'          => $consultation_id,
                             'name'        => $patient_name,
                             'patient_name'=> $patient_name,
-                            'doctor'      => $doctor_name,
-                            'doctor_name' => $doctor_name,
+                            'doctor'      => $doctor_display_name, // e.g. "John Doe" (so "Dr.  {doctor}" in DLT template resolves to "Dr.  John Doe")
+                            'doctor_name' => $doctor_full_title,
                             'slot'        => !empty($row->preferred_time_slot) ? $row->preferred_time_slot : (!empty($row->slot_time) ? date_i18n('d M Y, h:i A', strtotime($row->slot_time)) : __('Scheduled Slot', 'cmi-partner-portal')),
                             'date'        => !empty($row->preferred_date) ? date_i18n(get_option('date_format'), strtotime($row->preferred_date)) : (!empty($row->slot_time) ? date_i18n(get_option('date_format'), strtotime($row->slot_time)) : date_i18n(get_option('date_format'))),
                             'status'      => $row->status ?? 'scheduled',

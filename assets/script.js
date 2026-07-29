@@ -584,8 +584,39 @@ jQuery(function ($) {
     });
 
     // ── Tab Navigation Event Delegations ────────────────────────────────────
-    
-    // Patient / Partner Dashboard Main Tabs
+
+    // Build a user-scoped storage key so tab state never leaks across accounts or roles.
+    // key = cmi_active_tab_<userId>_<userRole>  e.g. cmi_active_tab_42_doctor
+    var _cmiUserId   = (typeof cmiPP !== 'undefined' && cmiPP.userId)   ? cmiPP.userId   : '0';
+    var _cmiUserRole = (typeof cmiPP !== 'undefined' && cmiPP.userRole) ? cmiPP.userRole : 'guest';
+    var _cmiTabKey   = 'cmi_active_tab_' + _cmiUserId + '_' + _cmiUserRole;
+
+    // Helper: read scoped tab value from sessionStorage, then cookie
+    function cmiGetScopedTab() {
+        var val = sessionStorage.getItem(_cmiTabKey);
+        if (!val) {
+            var m = document.cookie.match(new RegExp('(^| )' + _cmiTabKey + '=([^;]+)'));
+            if (m) val = m[2];
+        }
+        return val || null;
+    }
+
+    // Helper: write scoped tab value to sessionStorage + cookie
+    function cmiSetScopedTab(tab) {
+        sessionStorage.setItem(_cmiTabKey, tab);
+        document.cookie = _cmiTabKey + '=' + tab + '; path=/; SameSite=Strict';
+    }
+
+    // Helper: clear scoped tab from sessionStorage + expire cookie
+    function cmiClearScopedTab() {
+        sessionStorage.removeItem(_cmiTabKey);
+        document.cookie = _cmiTabKey + '=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+        // Also clear legacy unscoped keys from older plugin versions
+        sessionStorage.removeItem('cmi_active_tab');
+        document.cookie = 'cmi_active_tab=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+    }
+
+    // Patient / Partner Dashboard Main Tabs — click handler
     $(document).on('click', '.cmi-dashboard-tabs .cmi-tab-btn, .cmi-tabs.cmi-dashboard-tabs .cmi-tab-btn', function(){
         var tab = $(this).data('tab');
         $('.cmi-dashboard-tabs .cmi-tab-btn, .cmi-tabs.cmi-dashboard-tabs .cmi-tab-btn').removeClass('active');
@@ -594,9 +625,8 @@ jQuery(function ($) {
         $('.cmi-dashboard-tab-content').hide();
         $('#cmi-tab-content-' + tab).show();
 
-        // Save active tab to sessionStorage and cookie
-        sessionStorage.setItem('cmi_active_tab', tab);
-        document.cookie = "cmi_active_tab=" + tab + "; path=/; SameSite=Strict";
+        // Save active tab using scoped key (user-specific)
+        cmiSetScopedTab(tab);
 
         // Strip view_history and prefill if switching away from patients
         if (tab !== 'patients') {
@@ -609,7 +639,7 @@ jQuery(function ($) {
                 }
             }
         } else {
-            // If they clicked the 'patients' tab button and view_history is in the URL, reload the page to go back to list
+            // If they clicked the 'patients' tab button and view_history is in URL, reload to list
             var url = new URL(window.location.href);
             if (url.searchParams.has('view_history')) {
                 url.searchParams.delete('view_history');
@@ -618,23 +648,42 @@ jQuery(function ($) {
             }
         }
     });
-    // Restore active tab if persisted on page load (prefer cookie for server sync)
-    var activeTab = sessionStorage.getItem('cmi_active_tab');
-    if (!activeTab) {
-        var match = document.cookie.match(new RegExp('(^| )cmi_active_tab=([^;]+)'));
-        if (match) activeTab = match[2];
-    }
+
+    // ── Clear tab state on Logout ────────────────────────────────────────────
+    // Wipes the scoped sessionStorage + cookie when the user clicks any logout link
+    // so the next login always starts on the role-appropriate default tab.
+    $(document).on('click', 'a[href*="logout"]', function(){
+        cmiClearScopedTab();
+    });
+
+    // ── Restore active tab on page load ─────────────────────────────────────
+    // Priority: view_history URL param → scoped storage value → role default
+    var activeTab = null;
     var urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('view_history')) {
         activeTab = 'patients';
+    } else {
+        activeTab = cmiGetScopedTab();
     }
-    // If the user is a doctor, default to consultations tab if activeTab is not set or set to assignments
+
+    // Role-aware default: doctors default to consultations, not assignments
     if (typeof cmiPP !== 'undefined' && cmiPP.isDoctor && (!activeTab || activeTab === 'assignments')) {
         activeTab = 'consultations';
     }
+
     if (activeTab) {
+        // ── DOM Validation ────────────────────────────────────────────────────
+        // Check the restored tab button actually exists in the current user's dashboard.
+        // If not (e.g. Doctor tab stored but patient is now logged in), fall back to
+        // the first available tab button so the dashboard never shows a blank screen.
         var $tabBtn = $('.cmi-dashboard-tabs .cmi-tab-btn[data-tab="' + activeTab + '"], .cmi-tabs.cmi-dashboard-tabs .cmi-tab-btn[data-tab="' + activeTab + '"]');
-        if ($tabBtn.length) {
+        if (!$tabBtn.length) {
+            // Tab doesn't exist for this user/role — clear stale state and use default
+            cmiClearScopedTab();
+            $tabBtn = $('.cmi-dashboard-tabs .cmi-tab-btn:first, .cmi-tabs.cmi-dashboard-tabs .cmi-tab-btn:first');
+            activeTab = $tabBtn.data('tab') || null;
+        }
+        if ($tabBtn.length && activeTab) {
             $('.cmi-dashboard-tabs .cmi-tab-btn, .cmi-tabs.cmi-dashboard-tabs .cmi-tab-btn').removeClass('active');
             $tabBtn.addClass('active');
             $('.cmi-dashboard-tab-content').hide();

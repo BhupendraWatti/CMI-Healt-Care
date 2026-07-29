@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.22] — 2026-07-28
+
+### Fixed — Doctor Consultation Scheduled DLT SMS (Template ID `1077191330019642880`)
+- **Sanitized `{doctor}` Placeholder**: Fixed Airtel IQ DLT Template validation mismatch error by stripping leading `Dr.` prefix from `$doctor->display_name` in `CMI_HT_Notifications::notify_consultation_scheduled()` and `notify_consultation_assigned()` inside `includes/class-notifications.php`. Prevents corrupted payload `Dr.  Dr. DoctorName` when interpolating `{doctor}`.
+- **Fixed Message Spacing**: Corrected double spaces in default DLT message text in `includes/class-sms.php` (`with Dr. {doctor}` instead of `with Dr.  {doctor}`).
+
+---
+
 ## [1.0.21] — 2026-07-27
 
 ### Summary

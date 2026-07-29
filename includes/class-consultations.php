@@ -1504,6 +1504,10 @@ class CMI_Consultations {
                 // Firing it here too would send duplicate emails to the doctor and patient.
                 if ( 'scheduled' === $status ) {
                     do_action( 'cmi_consultation_scheduled', $id );
+                } elseif ( 'assigned' === $status ) {
+                    do_action( 'cmi_consultation_assigned', $id, $row->doctor_id );
+                } elseif ( 'rescheduled' === $status ) {
+                    do_action( 'cmi_consultation_rescheduled_by_admin', $id );
                 } elseif ( 'completed' === $status ) {
                     do_action( 'cmi_consultation_completed', $id );
                 } elseif ( 'cancelled' === $status ) {
