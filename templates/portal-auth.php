@@ -7,19 +7,19 @@
         </h2>
 
         <!-- Auth Mode Tabs -->
-        <div class="cmi-auth-toggle-tabs" style="display: flex; gap: 8px; margin-bottom: 22px; background: #f3f4f6; padding: 4px; border-radius: 8px;">
-            <button type="button" id="cmi-toggle-mobile-otp-btn" class="cmi-tab-btn active" style="flex: 1; padding: 10px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: #ffffff; color: #00a99d; box-shadow: 0 2px 4px rgba(0,0,0,0.06); transition: all 0.2s;">
+        <div class="cmi-auth-toggle-tabs" role="tablist" aria-label="Login method" style="display: flex; gap: 8px; margin-bottom: 22px; background: #f3f4f6; padding: 4px; border-radius: 8px;">
+            <button type="button" id="cmi-toggle-mobile-otp-btn" class="cmi-tab-btn active" role="tab" aria-selected="true" aria-controls="cmi-mobile-otp-form" style="flex: 1; padding: 10px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: #ffffff; color: #00a99d; box-shadow: 0 2px 4px rgba(0,0,0,0.06); transition: all 0.2s;">
                 📱 Login by OTP
             </button>
-            <button type="button" id="cmi-toggle-email-btn" class="cmi-tab-btn" style="flex: 1; padding: 10px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: #6b7280; transition: all 0.2s;">
+            <button type="button" id="cmi-toggle-email-btn" class="cmi-tab-btn" role="tab" aria-selected="false" aria-controls="cmi-email-login-form" style="flex: 1; padding: 10px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: #6b7280; transition: all 0.2s;">
                 ✉️ Email Login
             </button>
         </div>
 
-        <div id="cmi-auth-msg" class="cmi-msg" style="display:none; margin-bottom: 20px;"></div>
+        <div id="cmi-auth-msg" class="cmi-msg" role="status" aria-live="polite" style="display:none; margin-bottom: 20px;"></div>
 
         <!-- 1. Primary Auth: Airtel DLT 2-Step Mobile OTP Form -->
-        <form id="cmi-mobile-otp-form" class="cmi-auth-form" method="post">
+        <form id="cmi-mobile-otp-form" class="cmi-auth-form" method="post" role="tabpanel" aria-labelledby="cmi-toggle-mobile-otp-btn">
             <div id="cmi-otp-step-1">
                 <div class="cmi-form-row" style="margin-bottom: 18px;">
                     <label for="cmi-otp-mobile" style="display: block; font-size: 14px; font-weight: 600; color: #333333; margin-bottom: 8px;">Phone number</label>
@@ -77,7 +77,7 @@
         </form>
 
         <!-- 2. Email & Password Form -->
-        <form id="cmi-email-login-form" class="cmi-auth-form" style="display:none;" method="post">
+        <form id="cmi-email-login-form" class="cmi-auth-form" style="display:none;" method="post" role="tabpanel" aria-labelledby="cmi-toggle-email-btn">
             <div class="cmi-form-row" style="margin-bottom: 18px;">
                 <label for="cmi-login-email" style="display: block; font-size: 14px; font-weight: 600; color: #333333; margin-bottom: 8px;">Email address</label>
                 <input type="email" id="cmi-login-email" placeholder="name@example.com" style="width: 100%; border: 1px solid #cccccc; border-radius: 6px; padding: 10px 14px; font-size: 14px; outline: none; box-sizing: border-box;" />

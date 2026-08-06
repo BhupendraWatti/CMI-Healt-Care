@@ -57,7 +57,8 @@ class CMI_SMS_Context_Resolver {
                     if ($row) {
                         $user_id = intval($row->user_id ?? 0);
                         $patient = get_userdata($user_id);
-                        $doctor  = !empty($row->doctor_id) ? get_userdata($row->doctor_id) : null;
+                        $doc_id  = !empty($row->doctor_id) ? intval($row->doctor_id) : (!empty($hook_args[1]) && is_numeric($hook_args[1]) ? intval($hook_args[1]) : 0);
+                        $doctor  = $doc_id > 0 ? get_userdata($doc_id) : null;
 
                         $patient_name = !empty($row->patient_name) ? $row->patient_name : ($patient ? $patient->display_name : __('Patient', 'cmi-partner-portal'));
                         $doctor_display_name = $doctor ? preg_replace('/^Dr\.\s*/i', '', $doctor->display_name) : __('Doctor', 'cmi-partner-portal');
@@ -104,6 +105,17 @@ class CMI_SMS_Context_Resolver {
                         $partner_display = !empty($partner_org) ? $partner_org : $partner_name;
                         $partner_mobile  = $partner ? (get_user_meta($partner_id, '_cmi_mobile', true) ?: get_user_meta($partner_id, 'billing_phone', true)) : '';
 
+                        $package_names = '';
+                        if ($order && count($order->get_items()) > 0) {
+                            $names = [];
+                            foreach ($order->get_items() as $item) {
+                                $names[] = $item->get_name();
+                            }
+                            $package_names = implode(', ', $names);
+                        }
+
+                        $order_display = !empty($package_names) ? ($row->order_id . ' (' . $package_names . ')') : $row->order_id;
+
                         if ($recipient_type === 'partner_id') {
                             $data['mobile'] = $partner_mobile;
                         } else {
@@ -115,7 +127,8 @@ class CMI_SMS_Context_Resolver {
                             'patient_name' => $patient_name,
                             'partner'      => $partner_display,
                             'partner_name' => $partner_display,
-                            'order_id'     => $row->order_id,
+                            'order_id'     => $order_display,
+                            'order_name'   => $package_names ?: $row->order_id,
                             'id'           => $row->order_id,
                             'date'         => !empty($row->collection_date) ? date_i18n(get_option('date_format'), strtotime($row->collection_date)) : '',
                             'slot'         => $row->collection_time_slot ?? '',
@@ -132,14 +145,26 @@ class CMI_SMS_Context_Resolver {
                         $patient_name = $order->get_meta('_cmi_patient_name') ?: ($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
                         $patient_mobile = $order->get_meta('_cmi_patient_mobile') ?: $order->get_billing_phone();
 
+                        $package_names = '';
+                        if (count($order->get_items()) > 0) {
+                            $names = [];
+                            foreach ($order->get_items() as $item) {
+                                $names[] = $item->get_name();
+                            }
+                            $package_names = implode(', ', $names);
+                        }
+
+                        $order_display = !empty($package_names) ? ($order_id . ' (' . $package_names . ')') : $order_id;
+
                         $data['mobile'] = $patient_mobile;
                         $data['placeholders'] = [
-                            'name'     => $patient_name ?: __('Customer', 'cmi-partner-portal'),
-                            'order_id' => $order_id,
-                            'id'       => $order_id,
-                            'total'    => $order->get_total(),
-                            'date'     => date_i18n(get_option('date_format'), strtotime($order->get_date_created() ? $order->get_date_created()->date('Y-m-d') : 'now')),
-                            'slot'     => $order->get_meta('_cmi_booking_slot') ?: __('Scheduled Slot', 'cmi-partner-portal'),
+                            'name'       => $patient_name ?: __('Customer', 'cmi-partner-portal'),
+                            'order_id'   => $order_display,
+                            'order_name' => $package_names ?: $order_id,
+                            'id'         => $order_id,
+                            'total'      => $order->get_total(),
+                            'date'       => date_i18n(get_option('date_format'), strtotime($order->get_date_created() ? $order->get_date_created()->date('Y-m-d') : 'now')),
+                            'slot'       => $order->get_meta('_cmi_booking_slot') ?: __('Scheduled Slot', 'cmi-partner-portal'),
                         ];
                     }
                 }

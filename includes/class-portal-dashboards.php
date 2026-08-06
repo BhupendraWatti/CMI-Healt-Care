@@ -35,9 +35,14 @@ class CMI_Portal_Dashboards {
         }
 
         $user = wp_get_current_user();
+        if ( CMI_Roles::is_pending( $user ) ) {
+            return '<div class="cmi-portal-notice"><p>Your partner registration is pending CMI admin approval.</p>' .
+                   '<p><a href="' . esc_url( wp_logout_url( get_permalink() ) ) . '" class="button">Log Out</a></p></div>';
+        }
+
         if ( ! CMI_Roles::is_partner( $user ) ) {
             return '<div class="cmi-portal-notice"><p>You are logged in as a patient/subscriber. Please log out to access the Partner Portal.</p>' .
-                   '<p><a href="' . wp_logout_url( get_permalink() ) . '" class="button">Log Out</a></p></div>';
+                   '<p><a href="' . esc_url( wp_logout_url( get_permalink() ) ) . '" class="button">Log Out</a></p></div>';
         }
 
         ob_start();
@@ -142,7 +147,7 @@ class CMI_Portal_Dashboards {
                 'post_status'    => 'publish',
                 'author'         => $partner_id,
                 'meta_query'     => $meta_query,
-                'posts_per_page' => -1,
+                'posts_per_page' => 100,
                 'orderby'        => 'date',
                 'order'          => 'DESC',
             ]);
@@ -264,31 +269,22 @@ class CMI_Portal_Dashboards {
         }
 
         if ( $type === 'partner' ) {
-            // Self-service partner flow: Automatically approved
             $partner_type = sanitize_text_field( $_POST['partner_type'] ?? 'medical_partner' );
-            $allowed_types = [ 'medical_partner', 'cmi_doctor' ];
-            if ( ! in_array( $partner_type, $allowed_types, true ) ) {
-                $partner_type = 'medical_partner';
-            }
-
-            // Set role directly to the partner role (self-service auto-approved)
-            $user = new WP_User( $user_id );
-            $user->set_role( $partner_type );
-
-            update_user_meta( $user_id, '_cmi_partner_type', $partner_type );
-            update_user_meta( $user_id, '_cmi_org',          sanitize_text_field( $_POST['org'] ?? '' ) );
-            update_user_meta( $user_id, '_cmi_license',      sanitize_text_field( $_POST['license'] ?? '' ) );
-            update_user_meta( $user_id, '_cmi_approved',     current_time( 'mysql' ) );
+            $partner_type = CMI_Security::requested_partner_type( $partner_type );
+            CMI_Security::mark_pending_partner( $user_id, $partner_type, [
+                '_cmi_org'     => sanitize_text_field( $_POST['org'] ?? '' ),
+                '_cmi_license' => sanitize_text_field( $_POST['license'] ?? '' ),
+            ] );
 
             // Send notification email to admin about new partner registration
             $admin_email = get_option( 'admin_email' );
             wp_mail(
                 $admin_email,
-                'New Self-Service Partner Registered – CMI Healthcare',
-                "A new partner has registered and is active immediately.\n\n" .
+                'New Partner Approval Required - CMI Healthcare',
+                "A new partner has registered and requires admin approval.\n\n" .
                 "Name: {$name}\n" .
                 "Email: {$email}\n" .
-                "Role: {$partner_type}\n" .
+                "Requested Role: {$partner_type}\n" .
                 "Mobile: {$mobile}\n\n" .
                 "Manage partners here: " . admin_url( 'admin.php?page=cmi-partner-approvals' )
             );
@@ -323,6 +319,11 @@ class CMI_Portal_Dashboards {
      */
     public static function ajax_mobile_direct_auth() {
         check_ajax_referer( 'cmi_pp_nonce', 'nonce' );
+
+        wp_send_json_error( [
+            'message' => __( 'Passwordless mobile login now requires OTP verification. Please request an OTP to continue.', 'cmi-partner-portal' ),
+        ] );
+        wp_die();
 
         $mobile       = preg_replace( '/[^0-9]/', '', $_POST['mobile'] ?? '' );
         $name         = sanitize_text_field( $_POST['name'] ?? '' );
@@ -408,10 +409,7 @@ class CMI_Portal_Dashboards {
                 $partner_type = 'medical_partner';
             }
 
-            $u = new WP_User( $user_id );
-            $u->set_role( $partner_type );
-            update_user_meta( $user_id, '_cmi_partner_type', $partner_type );
-            update_user_meta( $user_id, '_cmi_approved', current_time( 'mysql' ) );
+            CMI_Security::mark_pending_partner( $user_id, $partner_type );
         }
 
         // Send Welcome SMS for new user registration
@@ -551,10 +549,7 @@ class CMI_Portal_Dashboards {
                     $partner_type = 'medical_partner';
                 }
 
-                $u = new WP_User( $user_id );
-                $u->set_role( $partner_type );
-                update_user_meta( $user_id, '_cmi_partner_type', $partner_type );
-                update_user_meta( $user_id, '_cmi_approved', current_time( 'mysql' ) );
+                CMI_Security::mark_pending_partner( $user_id, $partner_type );
             }
 
             // Dispatch Welcome SMS upon registration

@@ -51,6 +51,11 @@ class CMI_Consultations {
         // Automatically append booking widget to doctor CPT
         add_filter( 'the_content', [ $this, 'append_booking_widget_to_doctor_cpt' ] );
 
+        // Pre-meeting 5-minute automated SMS reminder hooks
+        add_filter( 'cron_schedules', [ $this, 'add_cron_schedules' ] );
+        add_action( 'init', [ $this, 'schedule_meeting_reminder_cron' ] );
+        add_action( 'cmi_check_upcoming_meeting_reminders_cron', [ $this, 'dispatch_upcoming_meeting_reminders' ] );
+
         // Admin Menus
         add_action( 'admin_menu', [ $this, 'register_admin_menu' ] );
     }
@@ -61,6 +66,164 @@ class CMI_Consultations {
     public function enqueue_consultation_assets() {
         // We will inline styles and scripts inside shortcodes/templates for modularity,
         // but this method is kept in case global enqueues are needed in the future.
+    }
+
+    private function get_available_consultation_payment( $user_id, $product_id ) {
+        if ( ! function_exists( 'wc_get_orders' ) ) {
+            return new WP_Error( 'woocommerce_missing', esc_html__( 'WooCommerce is required for paid consultations.', 'cmi-partner-portal' ) );
+        }
+
+        global $wpdb;
+        $consult_table = $wpdb->prefix . 'cmi_consultations';
+        $paid_orders = wc_get_orders( [
+            'customer_id' => $user_id,
+            'status'      => [ 'processing', 'completed' ],
+            'limit'       => 20,
+            'orderby'     => 'date',
+            'order'       => 'DESC',
+            'return'      => 'objects',
+        ] );
+
+        foreach ( $paid_orders as $wc_order ) {
+            foreach ( $wc_order->get_items() as $item ) {
+                $matches_product = absint( $item->get_product_id() ) === $product_id || absint( $item->get_variation_id() ) === $product_id;
+                if ( ! $matches_product ) {
+                    continue;
+                }
+                if ( $item->get_meta( '_cmi_consultation_consumed', true ) ) {
+                    continue;
+                }
+                $already_consumed = $wpdb->get_var( $wpdb->prepare(
+                    "SELECT id FROM $consult_table WHERE order_item_id = %d LIMIT 1",
+                    $item->get_id()
+                ) );
+                if ( $already_consumed ) {
+                    continue;
+                }
+
+                return [
+                    'order'         => $wc_order,
+                    'item'          => $item,
+                    'order_id'      => $wc_order->get_id(),
+                    'order_item_id' => $item->get_id(),
+                ];
+            }
+        }
+
+        return new WP_Error( 'consultation_payment_required', esc_html__( 'A paid, unused consultation order is required before submitting a request. Please complete your purchase first.', 'cmi-partner-portal' ) );
+    }
+
+    private function mark_consultation_payment_consumed( $payment, $consultation_id ) {
+        if ( empty( $payment['item'] ) || empty( $payment['order'] ) ) {
+            return;
+        }
+
+        $payment['item']->update_meta_data( '_cmi_consultation_consumed', 'yes' );
+        $payment['item']->update_meta_data( '_cmi_consultation_id', absint( $consultation_id ) );
+        $payment['item']->save();
+        $payment['order']->add_order_note( sprintf(
+            /* translators: %d = consultation id */
+            esc_html__( 'Consultation payment consumed by CMI consultation #%d.', 'cmi-partner-portal' ),
+            absint( $consultation_id )
+        ) );
+    }
+
+    private static function jitsi_requires_jwt() {
+        return 'no' !== get_option( 'cmi_jitsi_require_jwt', 'yes' );
+    }
+
+    private function parse_consultation_slot( $date, $slot ) {
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) || false === strtotime( $date ) ) {
+            return false;
+        }
+        if ( ! preg_match( '/^(.+?)\s*-\s*(.+)$/', $slot, $matches ) ) {
+            return false;
+        }
+
+        $start = date( 'H:i:s', strtotime( $matches[1] ) );
+        $end   = date( 'H:i:s', strtotime( $matches[2] ) );
+        if ( ! $start || ! $end || $start >= $end ) {
+            return false;
+        }
+
+        return [
+            'start' => $start,
+            'end'   => $end,
+        ];
+    }
+
+    private function is_consultation_slot_bookable( $doctor_id, $date, $slot, $exclude_consultation_id = 0 ) {
+        $doctor_id = absint( $doctor_id );
+        $range = $this->parse_consultation_slot( $date, $slot );
+        if ( ! $doctor_id || ! $range ) {
+            return false;
+        }
+
+        $today = current_time( 'Y-m-d' );
+        if ( $date < $today ) {
+            return false;
+        }
+
+        global $wpdb;
+        $avail_table      = $wpdb->prefix . 'cmi_doctor_availability';
+        $exceptions_table = $wpdb->prefix . 'cmi_doctor_exceptions';
+        $consult_table    = $wpdb->prefix . 'cmi_consultations';
+        $day_of_week      = date( 'l', strtotime( $date ) );
+
+        $exceptions = $wpdb->get_results( $wpdb->prepare(
+            "SELECT * FROM $exceptions_table WHERE doctor_id = %d AND %s BETWEEN start_date AND end_date",
+            $doctor_id,
+            $date
+        ) );
+
+        $override = null;
+        foreach ( (array) $exceptions as $ex ) {
+            if ( in_array( $ex->type, [ 'leave', 'holiday', 'emergency' ], true ) ) {
+                if ( empty( $ex->start_time ) || empty( $ex->end_time ) ) {
+                    return false;
+                }
+                if ( $range['start'] < $ex->end_time && $range['end'] > $ex->start_time ) {
+                    return false;
+                }
+            } elseif ( 'override' === $ex->type && ! empty( $ex->start_time ) && ! empty( $ex->end_time ) ) {
+                $override = $ex;
+            }
+        }
+
+        if ( $override ) {
+            $inside_working_hours = $range['start'] >= $override->start_time && $range['end'] <= $override->end_time;
+        } else {
+            $inside_working_hours = (bool) $wpdb->get_var( $wpdb->prepare(
+                "SELECT id FROM $avail_table
+                 WHERE doctor_id = %d AND day = %s AND status = 'active'
+                   AND start_time <= %s AND end_time >= %s
+                 LIMIT 1",
+                $doctor_id,
+                $day_of_week,
+                $range['start'],
+                $range['end']
+            ) );
+        }
+
+        if ( ! $inside_working_hours && 'yes' !== get_option( 'cmi_allow_default_doctor_slots', 'no' ) ) {
+            return false;
+        }
+
+        $conflict = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM $consult_table
+             WHERE doctor_id = %d
+               AND preferred_date = %s
+               AND preferred_time_slot = %s
+               AND status NOT IN ('cancelled')
+               AND id != %d
+             LIMIT 1",
+            $doctor_id,
+            $date,
+            $slot,
+            absint( $exclude_consultation_id )
+        ) );
+
+        return empty( $conflict );
     }
 
     /**
@@ -242,18 +405,20 @@ class CMI_Consultations {
             isset( $_POST['cmi_jitsi_save'] ) &&
             check_admin_referer( 'cmi_jitsi_settings_save', 'cmi_jitsi_nonce' )
         ) {
-            update_option( 'cmi_jitsi_app_id',     sanitize_text_field( $_POST['cmi_jitsi_app_id'] ?? '' ) );
-            update_option( 'cmi_jitsi_app_secret', sanitize_text_field( $_POST['cmi_jitsi_app_secret'] ?? '' ) );
-            update_option( 'cmi_jitsi_domain',     sanitize_text_field( $_POST['cmi_jitsi_domain'] ?? 'meet.jit.si' ) );
+            update_option( 'cmi_jitsi_domain',         sanitize_text_field( $_POST['cmi_jitsi_domain'] ?? '8x8.vc' ) );
+            update_option( 'cmi_jitsi_app_id',         sanitize_text_field( $_POST['cmi_jitsi_app_id'] ?? '' ) );
+            update_option( 'cmi_jitsi_api_key_id',     sanitize_text_field( $_POST['cmi_jitsi_api_key_id'] ?? '' ) );
+            update_option( 'cmi_jitsi_private_key',     sanitize_textarea_field( $_POST['cmi_jitsi_private_key'] ?? '' ) );
+            update_option( 'cmi_jitsi_app_secret',     sanitize_text_field( $_POST['cmi_jitsi_app_secret'] ?? '' ) );
             update_option( 'cmi_consultation_product_id', absint( $_POST['cmi_consultation_product_id'] ?? 0 ) );
             update_option( 'cmi_same_day_buffer_minutes', absint( $_POST['cmi_same_day_buffer_minutes'] ?? 30 ) );
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Jitsi settings saved.', 'cmi-partner-portal' ) . '</p></div>';
         }
         ?>
         <div style="margin-top:32px; background:#fff; border:1px solid #c3c4c7; border-radius:6px; padding:24px;">
-            <h2 style="margin-top:0;"><?php esc_html_e( 'Jitsi JWT Settings', 'cmi-partner-portal' ); ?></h2>
+            <h2 style="margin-top:0;"><?php esc_html_e( 'Jitsi JWT & JaaS (8x8) Settings', 'cmi-partner-portal' ); ?></h2>
             <p style="color:#646970; font-size:13px; margin-top:0;">
-                <?php esc_html_e( 'Configure JWT authentication for Jitsi meetings. Required for room permissions and host control. Works with self-hosted Jitsi (TOKEN_BASED_AUTH=1) and Jaas (jaas.8x8.vc). Leave App ID empty to run in open (no-JWT) mode.', 'cmi-partner-portal' ); ?>
+                <?php esc_html_e( 'Configure JWT authentication for Jitsi meetings. Supports Jitsi as a Service (JaaS - 8x8.vc) with PKI (RSA/EC) private keys, self-hosted Jitsi (TOKEN_BASED_AUTH=1 with HS256/RS256), or open mode. Prevents 5-minute meeting timeouts.', 'cmi-partner-portal' ); ?>
             </p>
             <form method="post" action="">
                 <?php wp_nonce_field( 'cmi_jitsi_settings_save', 'cmi_jitsi_nonce' ); ?>
@@ -262,24 +427,39 @@ class CMI_Consultations {
                         <th scope="row"><label for="cmi_jitsi_domain"><?php esc_html_e( 'Jitsi Domain', 'cmi-partner-portal' ); ?></label></th>
                         <td>
                             <input type="text" id="cmi_jitsi_domain" name="cmi_jitsi_domain" class="regular-text"
-                                   value="<?php echo esc_attr( get_option( 'cmi_jitsi_domain', 'meet.jit.si' ) ); ?>">
-                            <p class="description"><?php esc_html_e( 'e.g. meet.jit.si or your-jitsi.example.com or 8x8.vc/vpaas-magic-cookie-xxx', 'cmi-partner-portal' ); ?></p>
+                                   value="<?php echo esc_attr( get_option( 'cmi_jitsi_domain', '8x8.vc' ) ); ?>">
+                            <p class="description"><?php esc_html_e( 'Use 8x8.vc for JaaS, or meet.jit.si or your self-hosted domain.', 'cmi-partner-portal' ); ?></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="cmi_jitsi_app_id"><?php esc_html_e( 'App ID / Issuer', 'cmi-partner-portal' ); ?></label></th>
+                        <th scope="row"><label for="cmi_jitsi_app_id"><?php esc_html_e( 'App ID / Tenant ID', 'cmi-partner-portal' ); ?></label></th>
                         <td>
                             <input type="text" id="cmi_jitsi_app_id" name="cmi_jitsi_app_id" class="regular-text"
                                    value="<?php echo esc_attr( get_option( 'cmi_jitsi_app_id', '' ) ); ?>">
-                            <p class="description"><?php esc_html_e( 'JWT issuer claim (iss). Self-hosted: your app name. Jaas: your tenant ID from dashboard.', 'cmi-partner-portal' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Your 8x8 JaaS App ID / Tenant ID (e.g. vpaas-magic-cookie-39e1af0a96c84828829ecf9a61907db3).', 'cmi-partner-portal' ); ?></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="cmi_jitsi_app_secret"><?php esc_html_e( 'App Secret (HS256)', 'cmi-partner-portal' ); ?></label></th>
+                        <th scope="row"><label for="cmi_jitsi_api_key_id"><?php esc_html_e( 'API Key ID (Header kid)', 'cmi-partner-portal' ); ?></label></th>
+                        <td>
+                            <input type="text" id="cmi_jitsi_api_key_id" name="cmi_jitsi_api_key_id" class="regular-text"
+                                   value="<?php echo esc_attr( get_option( 'cmi_jitsi_api_key_id', '' ) ); ?>">
+                            <p class="description"><?php esc_html_e( 'The Key ID from your 8x8 JaaS console (used as JWT header kid). Leave empty to use App ID as kid.', 'cmi-partner-portal' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="cmi_jitsi_private_key"><?php esc_html_e( 'JaaS Private Key (.pk / .pem)', 'cmi-partner-portal' ); ?></label></th>
+                        <td>
+                            <textarea id="cmi_jitsi_private_key" name="cmi_jitsi_private_key" rows="6" class="large-text code" placeholder="Paste your -----BEGIN PRIVATE KEY----- PEM content here OR enter server file path (e.g. C:\Keys\jitsi.pk)"><?php echo esc_textarea( get_option( 'cmi_jitsi_private_key', '' ) ); ?></textarea>
+                            <p class="description"><?php esc_html_e( 'Paste your RSA or EC Private Key PEM text OR enter the full server file path to your .pk/.pem key file.', 'cmi-partner-portal' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="cmi_jitsi_app_secret"><?php esc_html_e( 'App Secret (Legacy HS256)', 'cmi-partner-portal' ); ?></label></th>
                         <td>
                             <input type="password" id="cmi_jitsi_app_secret" name="cmi_jitsi_app_secret" class="regular-text"
                                    value="<?php echo esc_attr( get_option( 'cmi_jitsi_app_secret', '' ) ); ?>" autocomplete="new-password">
-                            <p class="description"><?php esc_html_e( 'Shared secret configured in Jitsi\'s prosody JWT plugin (luajwtjitsi). Never expose this in HTML or client-side code.', 'cmi-partner-portal' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Legacy HS256 secret for self-hosted Jitsi. Ignored if a JaaS Private Key is provided above.', 'cmi-partner-portal' ); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -1088,30 +1268,15 @@ class CMI_Consultations {
         // product ID of the consultation product.  Leave empty to skip (e.g. for
         // complimentary consultations or internal doctor bookings).
         $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+        if ( $consultation_product_id <= 0 && 'yes' !== get_option( 'cmi_allow_free_consultations', 'no' ) ) {
+            wp_send_json_error( [ 'message' => esc_html__( 'Consultation payment is not configured. Please contact CMI Healthcare.', 'cmi-partner-portal' ) ] );
+        }
+
+        $payment = null;
         if ( $consultation_product_id > 0 ) {
-            $paid_statuses = [ 'processing', 'completed' ];
-
-            // Fetch the user's recent paid orders containing the consultation product.
-            $paid_orders = wc_get_orders( [
-                'customer_id' => $user_id,
-                'status'      => $paid_statuses,
-                'limit'       => 20,
-                'return'      => 'objects',
-            ] );
-
-            $has_paid = false;
-            foreach ( $paid_orders as $wc_order ) {
-                foreach ( $wc_order->get_items() as $item ) {
-                    if ( absint( $item->get_product_id() ) === $consultation_product_id ||
-                         absint( $item->get_variation_id() ) === $consultation_product_id ) {
-                        $has_paid = true;
-                        break 2;
-                    }
-                }
-            }
-
-            if ( ! $has_paid ) {
-                wp_send_json_error( [ 'message' => esc_html__( 'A paid consultation order is required before submitting a request. Please complete your purchase first.', 'cmi-partner-portal' ) ] );
+            $payment = $this->get_available_consultation_payment( $user_id, $consultation_product_id );
+            if ( is_wp_error( $payment ) ) {
+                wp_send_json_error( [ 'message' => $payment->get_error_message() ] );
             }
         }
         // ── End payment gate ─────────────────────────────────────────────────
@@ -1168,6 +1333,10 @@ class CMI_Consultations {
                     }
                 }
             }
+        }
+
+        if ( $doctor_id && ! $this->is_consultation_slot_bookable( $doctor_id, $preferred_date, $preferred_time ) ) {
+            wp_send_json_error( [ 'message' => esc_html__( 'The selected doctor slot is no longer available. Please choose another slot.', 'cmi-partner-portal' ) ] );
         }
 
         if ( 'new' === $member_id_raw ) {
@@ -1277,6 +1446,8 @@ class CMI_Consultations {
         $result = $wpdb->insert(
             $table,
             [
+                'order_id'             => $payment ? absint( $payment['order_id'] ) : null,
+                'order_item_id'        => $payment ? absint( $payment['order_item_id'] ) : null,
                 'user_id'              => $user_id,
                 'patient_member_id'    => $member_id,
                 'patient_name'         => $member->name,
@@ -1293,7 +1464,7 @@ class CMI_Consultations {
                 'created_at'           => current_time( 'mysql' ),
                 'updated_at'           => current_time( 'mysql' )
             ],
-            [ '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' ]
+            [ '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' ]
         );
 
         if ( ! $result ) {
@@ -1303,6 +1474,9 @@ class CMI_Consultations {
 
         $consult_id = $wpdb->insert_id;
         $wpdb->query( 'COMMIT' );
+        if ( $payment ) {
+            $this->mark_consultation_payment_consumed( $payment, $consult_id );
+        }
         // ── End transaction ──────────────────────────────────────────────────
 
         if ( $doctor_id ) {
@@ -1537,6 +1711,9 @@ class CMI_Consultations {
         if ( ! $id || empty( $date ) || empty( $slot ) ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Invalid parameter inputs.', 'cmi-partner-portal' ) ] );
         }
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) || false === strtotime( $date ) || $date < current_time( 'Y-m-d' ) ) {
+            wp_send_json_error( [ 'message' => esc_html__( 'Invalid consultation date.', 'cmi-partner-portal' ) ] );
+        }
 
         global $wpdb;
         $table = $wpdb->prefix . 'cmi_consultations';
@@ -1545,6 +1722,9 @@ class CMI_Consultations {
         $current_row = $wpdb->get_row( $wpdb->prepare( "SELECT status, doctor_id FROM $table WHERE id = %d", $id ) );
         if ( ! $current_row ) {
             wp_send_json_error( [ 'message' => esc_html__( 'Consultation not found.', 'cmi-partner-portal' ) ] );
+        }
+        if ( $current_row->doctor_id && ! $this->is_consultation_slot_bookable( $current_row->doctor_id, $date, $slot, $id ) ) {
+            wp_send_json_error( [ 'message' => esc_html__( 'The selected doctor slot is unavailable or conflicts with another consultation.', 'cmi-partner-portal' ) ] );
         }
 
         $update_data = [
@@ -1628,69 +1808,175 @@ class CMI_Consultations {
      * @param bool   $is_moderator  True → doctor (host), False → patient (guest).
      * @return string|false  Signed JWT string, or false when not configured.
      */
+    /**
+     * Generate a signed Jitsi JWT token (RS256 / ES256 for JaaS, or HS256 for self-hosted).
+     *
+     * Supports Jitsi as a Service (8x8.vc) using RSA / EC Private Keys (.pk / .pem)
+     * and fallback to self-hosted Jitsi (TOKEN_BASED_AUTH=1, luajwtjitsi).
+     * No composer dependencies required — uses native OpenSSL PHP functions.
+     *
+     * wp_options used:
+     *   cmi_jitsi_domain      — Jitsi domain (e.g. 8x8.vc)
+     *   cmi_jitsi_app_id      — App ID / Tenant ID (sub claim for JaaS)
+     *   cmi_jitsi_api_key_id  — API Key ID (header kid claim for JaaS)
+     *   cmi_jitsi_private_key — Private key PEM string or server file path (.pk/.pem)
+     *   cmi_jitsi_app_secret  — Legacy HS256 shared secret
+     *
+     * @param string $room_id       Meeting room identifier.
+     * @param int    $user_id       WordPress user ID of the joining participant.
+     * @param bool   $is_moderator  True → doctor (host), False → patient (guest).
+     * @return string|false  Signed JWT string, or false when not configured.
+     */
     private static function generate_jitsi_jwt( $room_id, $user_id, $is_moderator ) {
-        $app_id     = get_option( 'cmi_jitsi_app_id',     '' );
-        $app_secret = get_option( 'cmi_jitsi_app_secret', '' );
+        $app_id       = trim( get_option( 'cmi_jitsi_app_id', '' ) );
+        $api_key_id   = trim( get_option( 'cmi_jitsi_api_key_id', '' ) );
+        $priv_key_opt = trim( get_option( 'cmi_jitsi_private_key', '' ) );
+        $app_secret   = trim( get_option( 'cmi_jitsi_app_secret', '' ) );
+        $domain       = rtrim( get_option( 'cmi_jitsi_domain', '8x8.vc' ), '/' );
 
-        // Graceful degradation: if JWT is not configured, Jitsi runs in open mode.
-        if ( empty( $app_id ) || empty( $app_secret ) ) {
-            return false;
-        }
-
-        $domain = rtrim( get_option( 'cmi_jitsi_domain', 'meet.jit.si' ), '/' );
-        $user   = get_userdata( $user_id );
-        $name   = $user ? $user->display_name : ( $is_moderator ? 'Doctor' : 'Patient' );
-        $email  = $user ? $user->user_email   : '';
+        $user  = get_userdata( $user_id );
+        $name  = $user ? $user->display_name : ( $is_moderator ? 'Doctor' : 'Patient' );
+        $email = $user ? $user->user_email   : '';
 
         $now = time();
         $exp = $now + ( 2 * HOUR_IN_SECONDS ); // Token valid for 2 hours
 
-        // ── JWT Header ────────────────────────────────────────────────────────
-        $header = [
-            'alg' => 'HS256',
-            'typ' => 'JWT',
-            'kid' => $app_id . '/HS256',
-        ];
-
-        // ── JWT Payload — Jitsi JWT spec ─────────────────────────────────────
-        $payload = [
-            'aud'     => 'jitsi',
-            'iss'     => $app_id,
-            'sub'     => $domain,
-            'room'    => $room_id,
-            'exp'     => $exp,
-            'nbf'     => $now - 5, // 5-second clock-skew tolerance
-            'context' => [
-                'user' => [
-                    'id'          => (string) $user_id,
-                    'name'        => $name,
-                    'email'       => $email,
-                    'moderator'   => (bool) $is_moderator,
-                    'affiliation' => $is_moderator ? 'owner' : 'member',
-                    'avatar'      => '',
-                ],
-                'features' => [
-                    // Only doctor/moderator can initiate recording, livestreaming or transcription
-                    'livestreaming' => (bool) $is_moderator,
-                    'recording'     => (bool) $is_moderator,
-                    'transcription' => (bool) $is_moderator,
-                    'outbound-call' => false,
-                ],
-            ],
-        ];
-
-        // ── HS256 sign ────────────────────────────────────────────────────────
-        // base64url = base64 with +/ → -_ and = padding stripped
         $b64url = function ( $data ) {
             return rtrim( strtr( base64_encode( $data ), '+/', '-_' ), '=' );
         };
 
-        $header_enc    = $b64url( wp_json_encode( $header ) );
-        $payload_enc   = $b64url( wp_json_encode( $payload ) );
-        $signing_input = $header_enc . '.' . $payload_enc;
-        $signature     = $b64url( hash_hmac( 'sha256', $signing_input, $app_secret, true ) );
+        // ── 1. Try JaaS / PKI Authentication (RS256 or ES256) ───────────────────
+        $pkey = null;
+        if ( ! empty( $priv_key_opt ) ) {
+            if ( strpos( $priv_key_opt, '-----BEGIN' ) !== false ) {
+                $pkey = openssl_pkey_get_private( $priv_key_opt );
+            } elseif ( file_exists( $priv_key_opt ) ) {
+                $key_raw = file_get_contents( $priv_key_opt );
+                if ( $key_raw !== false ) {
+                    $pkey = openssl_pkey_get_private( $key_raw );
+                }
+            }
+        }
 
-        return $signing_input . '.' . $signature;
+        if ( $pkey ) {
+            $key_details = openssl_pkey_get_details( $pkey );
+            $alg = 'RS256';
+            if ( isset( $key_details['type'] ) && $key_details['type'] === OPENSSL_KEYTYPE_EC ) {
+                $alg = 'ES256';
+            }
+
+            $kid = ! empty( $api_key_id ) ? $api_key_id : $app_id;
+
+            $header = [
+                'alg' => $alg,
+                'typ' => 'JWT',
+                'kid' => $kid,
+            ];
+
+            // Payload structure according to official 8x8 JaaS specifications
+            $payload = [
+                'aud'     => 'jitsi',
+                'iss'     => 'chat',
+                'sub'     => $app_id,
+                'room'    => $room_id,
+                'exp'     => $exp,
+                'nbf'     => $now - 5,
+                'context' => [
+                    'user' => [
+                        'id'          => (string) $user_id,
+                        'name'        => $name,
+                        'email'       => $email,
+                        'moderator'   => (bool) $is_moderator,
+                        'affiliation' => $is_moderator ? 'owner' : 'member',
+                        'avatar'      => '',
+                    ],
+                    'features' => [
+                        'livestreaming' => (bool) $is_moderator,
+                        'recording'     => (bool) $is_moderator,
+                        'transcription' => (bool) $is_moderator,
+                        'outbound-call' => false,
+                    ],
+                ],
+            ];
+
+            $header_enc    = $b64url( wp_json_encode( $header ) );
+            $payload_enc   = $b64url( wp_json_encode( $payload ) );
+            $signing_input = $header_enc . '.' . $payload_enc;
+
+            $signature_bin = '';
+            if ( $alg === 'RS256' ) {
+                if ( ! openssl_sign( $signing_input, $signature_bin, $pkey, OPENSSL_ALGO_SHA256 ) ) {
+                    return false;
+                }
+            } elseif ( $alg === 'ES256' ) {
+                $der = '';
+                if ( ! openssl_sign( $signing_input, $der, $pkey, OPENSSL_ALGO_SHA256 ) ) {
+                    return false;
+                }
+                // Convert ASN.1 DER signature to raw R+S concatenation (64 bytes)
+                $offset = 2;
+                if ( ord( $der[1] ) & 0x80 ) {
+                    $offset += ( ord( $der[1] ) & 0x7f );
+                }
+                $r_len = ord( $der[ $offset + 1 ] );
+                $r     = substr( $der, $offset + 2, $r_len );
+                $offset += 2 + $r_len;
+                $s_len = ord( $der[ $offset + 1 ] );
+                $s     = substr( $der, $offset + 2, $s_len );
+
+                $r = ltrim( $r, "\x00" );
+                $s = ltrim( $s, "\x00" );
+                $r = str_pad( $r, 32, "\x00", STR_PAD_LEFT );
+                $s = str_pad( $s, 32, "\x00", STR_PAD_LEFT );
+                $signature_bin = $r . $s;
+            }
+
+            return $signing_input . '.' . $b64url( $signature_bin );
+        }
+
+        // ── 2. Fallback to Legacy HS256 Secret Authentication ──────────────────
+        if ( ! empty( $app_id ) && ! empty( $app_secret ) ) {
+            $header = [
+                'alg' => 'HS256',
+                'typ' => 'JWT',
+                'kid' => $app_id . '/HS256',
+            ];
+
+            $payload = [
+                'aud'     => 'jitsi',
+                'iss'     => $app_id,
+                'sub'     => $domain,
+                'room'    => $room_id,
+                'exp'     => $exp,
+                'nbf'     => $now - 5,
+                'context' => [
+                    'user' => [
+                        'id'          => (string) $user_id,
+                        'name'        => $name,
+                        'email'       => $email,
+                        'moderator'   => (bool) $is_moderator,
+                        'affiliation' => $is_moderator ? 'owner' : 'member',
+                        'avatar'      => '',
+                    ],
+                    'features' => [
+                        'livestreaming' => (bool) $is_moderator,
+                        'recording'     => (bool) $is_moderator,
+                        'transcription' => (bool) $is_moderator,
+                        'outbound-call' => false,
+                    ],
+                ],
+            ];
+
+            $header_enc    = $b64url( wp_json_encode( $header ) );
+            $payload_enc   = $b64url( wp_json_encode( $payload ) );
+            $signing_input = $header_enc . '.' . $payload_enc;
+            $signature     = $b64url( hash_hmac( 'sha256', $signing_input, $app_secret, true ) );
+
+            return $signing_input . '.' . $signature;
+        }
+
+        // Fail closed when protected meeting mode is enabled.
+        return false;
     }
 
     /**
@@ -1708,7 +1994,7 @@ class CMI_Consultations {
         $table = $wpdb->prefix . 'cmi_consultations';
 
         $results = $wpdb->get_results( $wpdb->prepare(
-            "SELECT * FROM $table WHERE doctor_id = %d ORDER BY id DESC",
+            "SELECT * FROM $table WHERE doctor_id = %d ORDER BY id DESC LIMIT 100",
             $doctor_id
         ) );
 
@@ -2168,15 +2454,9 @@ class CMI_Consultations {
 
         $file = $_FILES['prescription_file'];
 
-        // Validate PDF type
-        $file_type = wp_check_filetype( $file['name'] );
-        if ( $file_type['ext'] !== 'pdf' || $file_type['type'] !== 'application/pdf' ) {
-            wp_send_json_error( [ 'message' => esc_html__( 'Only PDF prescription reports are allowed.', 'cmi-partner-portal' ) ] );
-        }
-
-        // Validate size (max 10MB)
-        if ( $file['size'] > 10 * 1024 * 1024 ) {
-            wp_send_json_error( [ 'message' => esc_html__( 'Prescription file must be under 10 MB.', 'cmi-partner-portal' ) ] );
+        $validation = CMI_Security::validate_uploaded_file( $file, [ 'pdf' ] );
+        if ( is_wp_error( $validation ) ) {
+            wp_send_json_error( [ 'message' => $validation->get_error_message() ] );
         }
 
         global $wpdb;
@@ -2208,7 +2488,7 @@ class CMI_Consultations {
                 'patient_name'   => $row->patient_name,
                 'file_tmp'       => $file['tmp_name'],
                 'file_name'      => $file['name'],
-                'file_type'      => $file['type'],
+                'file_type'      => $validation['mime'],
                 'notes'          => $notes,
                 'uploaded_by'    => $doctor_id,
                 'post_type'      => 'cmi_prescription',
@@ -2538,6 +2818,11 @@ class CMI_Consultations {
                 }
             }
         } else {
+            if ( 'yes' !== get_option( 'cmi_allow_default_doctor_slots', 'no' ) ) {
+                wp_send_json_success( [ 'slots' => [] ] );
+                return;
+            }
+
             // Default 30-minute fallback slots (equivalent to 2-hour blocks but sliced into 30 mins)
             $default_blocks = [
                 [ '09:00:00', '13:00:00' ],
@@ -2775,13 +3060,19 @@ class CMI_Consultations {
             'consultation_type'    => $row->consultation_type,
             'preferred_date'       => $formatted_date,
             'preferred_time'       => $row->preferred_time_slot,
-            'domain'               => rtrim( get_option( 'cmi_jitsi_domain', 'meet.jit.si' ), '/' ),
+            'domain'               => rtrim( get_option( 'cmi_jitsi_domain', '8x8.vc' ), '/' ),
+            'app_id'               => get_option( 'cmi_jitsi_app_id', '' ),
             'doctor_busy'          => $doctor_busy,
         ];
 
         // generate_jitsi_jwt() returns false when JWT is not configured —
-        // callers must handle the null/undefined case and run in open mode.
+        // Protected meeting mode fails closed below.
         $jwt = self::generate_jitsi_jwt( $row->meeting_room_id, $user_id, $is_moderator );
+        if ( ! $jwt && self::jitsi_requires_jwt() ) {
+            wp_send_json_error( [
+                'message' => esc_html__( 'Video consultation access is not configured securely. Please contact CMI Healthcare.', 'cmi-partner-portal' ),
+            ] );
+        }
         if ( $jwt ) {
             $response['jwt'] = $jwt;
         }
@@ -3650,5 +3941,100 @@ class CMI_Consultations {
             }
         }
         return $content;
+    }
+
+    /**
+     * Add custom 5-minute cron schedule for pre-meeting SMS reminders.
+     */
+    public function add_cron_schedules( $schedules ) {
+        if ( ! isset( $schedules['cmi_five_minutes'] ) ) {
+            $schedules['cmi_five_minutes'] = [
+                'interval' => 300, // 300 seconds = 5 minutes
+                'display'  => __( 'Every 5 Minutes (CMI Reminders)', 'cmi-partner-portal' ),
+            ];
+        }
+        return $schedules;
+    }
+
+    /**
+     * Schedule recurring WP-Cron event if not already scheduled.
+     */
+    public function schedule_meeting_reminder_cron() {
+        if ( ! wp_next_scheduled( 'cmi_check_upcoming_meeting_reminders_cron' ) ) {
+            wp_schedule_event( time(), 'cmi_five_minutes', 'cmi_check_upcoming_meeting_reminders_cron' );
+        }
+    }
+
+    /**
+     * Cron callback: checks scheduled meetings starting in ~5 minutes and dispatches DLT SMS reminder.
+     */
+    public function dispatch_upcoming_meeting_reminders() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cmi_consultations';
+
+        $tz = new DateTimeZone( 'Asia/Kolkata' );
+        $now_dt = new DateTime( 'now', $tz );
+        $today = $now_dt->format( 'Y-m-d' );
+
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT * FROM $table WHERE status IN ('scheduled', 'assigned') AND preferred_date = %s",
+            $today
+        ) );
+
+        if ( empty( $rows ) ) {
+            return;
+        }
+
+        foreach ( $rows as $row ) {
+            $consult_id = intval( $row->id );
+            
+            // Check if reminder was already dispatched for this consultation ID
+            $already_sent = get_option( "cmi_rem_sent_{$consult_id}", false );
+            if ( $already_sent ) {
+                continue;
+            }
+
+            // Parse preferred_time_slot start time (e.g. "03:00 PM - 03:30 PM" or "15:00 - 15:30")
+            $parts = explode( '-', $row->preferred_time_slot );
+            $start_str = ! empty( $parts[0] ) ? trim( $parts[0] ) : '';
+            if ( empty( $start_str ) ) {
+                continue;
+            }
+
+            try {
+                $slot_dt = new DateTime( $today . ' ' . $start_str, $tz );
+            } catch ( Exception $e ) {
+                continue;
+            }
+
+            // Calculate minutes until meeting start time
+            $diff_seconds = $slot_dt->getTimestamp() - $now_dt->getTimestamp();
+            $diff_minutes = round( $diff_seconds / 60 );
+
+            // Trigger reminder if meeting starts within 15 minutes (or up to 2 minutes past start)
+            if ( $diff_minutes >= -2 && $diff_minutes <= 15 ) {
+                $user_id = intval( $row->user_id );
+                $patient_mobile = ! empty( $row->patient_mobile ) ? $row->patient_mobile
+                    : ( get_user_meta( $user_id, '_cmi_mobile', true ) ?: get_user_meta( $user_id, 'billing_phone', true ) );
+
+                if ( empty( $patient_mobile ) ) {
+                    continue;
+                }
+
+                $doctor = ! empty( $row->doctor_id ) ? get_userdata( $row->doctor_id ) : null;
+                $doc_clean_name = $doctor ? preg_replace( '/^Dr\.\s*/i', '', $doctor->display_name ) : 'Assigned Doctor';
+
+                if ( class_exists( 'CMI_SMS_Manager' ) ) {
+                    CMI_SMS_Manager::send_event_sms( 'consultation_reminder', $patient_mobile, [
+                        'name'   => $row->patient_name,
+                        'id'     => $consult_id,
+                        'doctor' => $doc_clean_name
+                    ] );
+                }
+
+                // Mark reminder as dispatched to prevent duplicate SMS
+                update_option( "cmi_rem_sent_{$consult_id}", current_time( 'mysql' ) );
+            }
+        }
     }
 }

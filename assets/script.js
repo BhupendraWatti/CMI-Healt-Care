@@ -701,7 +701,8 @@ jQuery(function ($) {
     $(document).on('click', '#cmi-toggle-email-btn', function(e){
         e.preventDefault();
         $('.cmi-auth-toggle-tabs .cmi-tab-btn').removeClass('active');
-        $(this).addClass('active');
+        $('.cmi-auth-toggle-tabs .cmi-tab-btn').attr('aria-selected', 'false');
+        $(this).addClass('active').attr('aria-selected', 'true');
         $('#cmi-mobile-direct-form, #cmi-mobile-otp-form').hide();
         $('#cmi-email-login-form').fadeIn(200);
         $('#cmi-auth-msg').hide();
@@ -710,7 +711,8 @@ jQuery(function ($) {
     $(document).on('click', '#cmi-toggle-phone-btn', function(e){
         e.preventDefault();
         $('.cmi-auth-toggle-tabs .cmi-tab-btn').removeClass('active');
-        $('#cmi-toggle-mobile-otp-btn').addClass('active');
+        $('.cmi-auth-toggle-tabs .cmi-tab-btn').attr('aria-selected', 'false');
+        $('#cmi-toggle-mobile-otp-btn').addClass('active').attr('aria-selected', 'true');
         $('#cmi-email-login-form').hide();
         $('#cmi-mobile-otp-form').fadeIn(200);
         $('#cmi-auth-msg').hide();
@@ -1600,7 +1602,15 @@ jQuery(function ($) {
                     // ── Step 2: Launch Jitsi only after the server grants access ──
                     const launchMeeting = () => {
                         try {
-                            const domain = response.data.domain || 'meet.jit.si';
+                            const domain = response.data.domain || '8x8.vc';
+                            const appId = response.data.app_id || '';
+
+                            // For JaaS (8x8.vc), roomName must be formatted as "<AppID>/<RoomName>"
+                            let targetRoom = roomName;
+                            if (appId && !targetRoom.startsWith(appId + '/')) {
+                                targetRoom = appId + '/' + targetRoom;
+                            }
+
                             const toolbarButtons = [
                                 'microphone', 'camera', 'closedcaptions', 'desktop', 'fullscreen',
                                 'fodeviceselection', 'hangup', 'profile', 'chat', 'settings', 'videoquality'
@@ -1611,7 +1621,7 @@ jQuery(function ($) {
                             }
 
                             const options = {
-                                roomName: roomName,
+                                roomName: targetRoom,
                                 width: '100%',
                                 height: '100%',
                                 parentNode: document.querySelector('#cmi-jitsi-meeting-iframe'),
@@ -1707,12 +1717,17 @@ jQuery(function ($) {
                         }
                     };
 
-                    const domain = response.data.domain || 'meet.jit.si';
+                    const domain = response.data.domain || '8x8.vc';
+                    const appId = response.data.app_id || '';
 
                     // Load Jitsi script dynamically from the configured domain if not already present.
                     if (typeof JitsiMeetExternalAPI === 'undefined') {
                         const script = document.createElement('script');
-                        script.src = 'https://' + domain + '/external_api.js';
+                        let scriptSrc = 'https://' + domain + '/external_api.js';
+                        if (appId && (domain === '8x8.vc' || domain.indexOf('8x8.vc') > -1)) {
+                            scriptSrc = 'https://8x8.vc/' + appId + '/external_api.js';
+                        }
+                        script.src = scriptSrc;
                         script.onload = launchMeeting;
                         script.onerror = function() {
                             $('#cmi-jitsi-loading').hide();
@@ -1815,4 +1830,3 @@ jQuery(function ($) {
         });
     });
 });
-

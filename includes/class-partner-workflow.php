@@ -26,16 +26,7 @@ class CMI_HT_Partner_Workflow {
 
         $user_id = get_current_user_id();
         if ( ! $user_id || ! current_user_can( 'cmi_view_assignments' ) ) {
-            $user = wp_get_current_user();
-            $roles = $user ? implode( ',', (array) $user->roles ) : 'none';
-            wp_send_json_error( [ 
-                'message' => sprintf(
-                    esc_html__( 'Unauthorized access. (User ID: %d, Roles: %s, Cap: %s)', 'cmi-home-testing' ),
-                    $user_id,
-                    $roles,
-                    current_user_can( 'cmi_view_assignments' ) ? 'yes' : 'no'
-                )
-            ] );
+            wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
         }
 
         $id = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
@@ -79,16 +70,7 @@ class CMI_HT_Partner_Workflow {
 
         $user_id = get_current_user_id();
         if ( ! $user_id || ! current_user_can( 'cmi_view_assignments' ) ) {
-            $user = wp_get_current_user();
-            $roles = $user ? implode( ',', (array) $user->roles ) : 'none';
-            wp_send_json_error( [ 
-                'message' => sprintf(
-                    esc_html__( 'Unauthorized access. (User ID: %d, Roles: %s, Cap: %s)', 'cmi-home-testing' ),
-                    $user_id,
-                    $roles,
-                    current_user_can( 'cmi_view_assignments' ) ? 'yes' : 'no'
-                )
-            ] );
+            wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
         }
 
         $id     = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
@@ -135,16 +117,7 @@ class CMI_HT_Partner_Workflow {
 
         $user_id = get_current_user_id();
         if ( ! $user_id || ! current_user_can( 'cmi_view_assignments' ) ) {
-            $user = wp_get_current_user();
-            $roles = $user ? implode( ',', (array) $user->roles ) : 'none';
-            wp_send_json_error( [ 
-                'message' => sprintf(
-                    esc_html__( 'Unauthorized access. (User ID: %d, Roles: %s, Cap: %s)', 'cmi-home-testing' ),
-                    $user_id,
-                    $roles,
-                    current_user_can( 'cmi_view_assignments' ) ? 'yes' : 'no'
-                )
-            ] );
+            wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
         }
 
         $id     = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
@@ -191,16 +164,7 @@ class CMI_HT_Partner_Workflow {
 
         $user_id = get_current_user_id();
         if ( ! $user_id || ! current_user_can( 'cmi_view_assignments' ) ) {
-            $user = wp_get_current_user();
-            $roles = $user ? implode( ',', (array) $user->roles ) : 'none';
-            wp_send_json_error( [ 
-                'message' => sprintf(
-                    esc_html__( 'Unauthorized access. (User ID: %d, Roles: %s, Cap: %s)', 'cmi-home-testing' ),
-                    $user_id,
-                    $roles,
-                    current_user_can( 'cmi_view_assignments' ) ? 'yes' : 'no'
-                )
-            ] );
+            wp_send_json_error( [ 'message' => esc_html__( 'Unauthorized access.', 'cmi-home-testing' ) ] );
         }
 
         $id             = isset( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
@@ -226,10 +190,9 @@ class CMI_HT_Partner_Workflow {
 
         $file = $_FILES['report_file'];
 
-        // File validation (must be PDF)
-        $file_type = wp_check_filetype( $file['name'] );
-        if ( $file_type['ext'] !== 'pdf' || $file_type['type'] !== 'application/pdf' ) {
-            wp_send_json_error( [ 'message' => esc_html__( 'Only PDF report files are allowed.', 'cmi-home-testing' ) ] );
+        $validation = CMI_Security::validate_uploaded_file( $file, [ 'pdf' ] );
+        if ( is_wp_error( $validation ) ) {
+            wp_send_json_error( [ 'message' => $validation->get_error_message() ] );
         }
 
         // Fetch Patient details from Order (HPOS compatible)
@@ -261,7 +224,7 @@ class CMI_HT_Partner_Workflow {
                 'report_type_id' => $report_type_id,
                 'file_tmp'       => $file['tmp_name'],
                 'file_name'      => $file['name'],
-                'file_type'      => $file['type'],
+                'file_type'      => $validation['mime'],
                 'notes'          => $notes,
                 'uploaded_by'    => $user_id,
                 'post_type'      => 'cmi_report',
@@ -275,14 +238,15 @@ class CMI_HT_Partner_Workflow {
             $secure_filename = get_post_meta( $result, '_cmi_file_name', true );
         } else {
             // Standalone Fallback Upload Handler (If sibling CPT is not active)
-            $secure_dir = WP_CONTENT_DIR . '/cmi-secure-reports';
+            $secure_dir = CMI_PP_UPLOAD_DIR;
             if ( ! file_exists( $secure_dir ) ) {
                 wp_mkdir_p( $secure_dir );
-                file_put_contents( $secure_dir . '/.htaccess', "Options -Indexes\nDeny from all\n" );
-                file_put_contents( $secure_dir . '/index.php', '<?php // silence' );
+            }
+            if ( function_exists( 'cmi_pp_protect_upload_directory' ) ) {
+                cmi_pp_protect_upload_directory( $secure_dir );
             }
 
-            $secure_filename = 'report_' . $row->order_id . '_' . time() . '.pdf';
+            $secure_filename = wp_unique_filename( $secure_dir, 'report_' . absint( $row->order_id ) . '_' . wp_generate_password( 12, false ) . '.pdf' );
             $destination = $secure_dir . '/' . $secure_filename;
 
             if ( ! move_uploaded_file( $file['tmp_name'], $destination ) ) {

@@ -3,7 +3,7 @@
  * Plugin Name: CMI Partner Portal
  * Plugin URI:  https://cmihealthcare.in
  * Description: Partner login, report upload/download, prescriptions and guest report access for CMI Healthcare.
- * Version:     1.0.22
+ * Version:     1.0.27
  * Author:      CMI Healthcare
  * Text Domain: cmi-partner-portal
  */
@@ -22,13 +22,18 @@ function cmi_pp_conflict_notice() {
     echo '</div>';
 }
 
-define( 'CMI_PP_VERSION', '1.0.22' );
+define( 'CMI_PP_VERSION', '1.0.27' );
 define( 'CMI_PP_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'CMI_PP_URL',     plugin_dir_url( __FILE__ ) );
-define( 'CMI_PP_UPLOAD_DIR', WP_CONTENT_DIR . '/cmi-secure-reports' );
-define( 'CMI_PP_UPLOAD_URL', WP_CONTENT_URL . '/cmi-secure-reports' );
+define( 'CMI_PP_LEGACY_UPLOAD_DIR', WP_CONTENT_DIR . '/cmi-secure-reports' );
+define( 'CMI_PP_LEGACY_UPLOAD_URL', WP_CONTENT_URL . '/cmi-secure-reports' );
+$cmi_pp_configured_upload_dir = get_option( 'cmi_secure_upload_dir', '' );
+$cmi_pp_default_upload_dir    = rtrim( dirname( rtrim( ABSPATH, '/\\' ) ), '/\\' ) . DIRECTORY_SEPARATOR . 'cmi-secure-reports';
+define( 'CMI_PP_UPLOAD_DIR', $cmi_pp_configured_upload_dir ? $cmi_pp_configured_upload_dir : $cmi_pp_default_upload_dir );
+define( 'CMI_PP_UPLOAD_URL', '' );
 
 require_once CMI_PP_PATH . 'includes/class-roles.php';
+require_once CMI_PP_PATH . 'includes/class-security.php';
 require_once CMI_PP_PATH . 'includes/class-cpt.php';
 require_once CMI_PP_PATH . 'includes/class-upload.php';
 require_once CMI_PP_PATH . 'includes/class-download.php';
@@ -104,9 +109,7 @@ function cmi_pp_activate() {
     }
     
     if ( is_writable( CMI_PP_UPLOAD_DIR ) ) {
-        // Block direct access
-        file_put_contents( CMI_PP_UPLOAD_DIR . '/.htaccess', "Options -Indexes\nDeny from all\n" );
-        file_put_contents( CMI_PP_UPLOAD_DIR . '/index.php', '<?php // silence' );
+        cmi_pp_protect_upload_directory( CMI_PP_UPLOAD_DIR );
     }
 
     // Run database migrations for home testing
@@ -148,6 +151,18 @@ function cmi_pp_activate() {
         KEY report_id (report_id)
     ) $charset_collate;";
     dbDelta( $sql2 );
+}
+
+function cmi_pp_protect_upload_directory( $dir ) {
+    if ( ! file_exists( $dir ) ) {
+        wp_mkdir_p( $dir );
+    }
+    if ( ! is_writable( $dir ) ) {
+        return;
+    }
+    file_put_contents( $dir . '/.htaccess', "Options -Indexes\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n" );
+    file_put_contents( $dir . '/web.config', "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration><system.webServer><security><authorization><remove users=\"*\" roles=\"\" verbs=\"\" /><add accessType=\"Deny\" users=\"*\" /></authorization></security></system.webServer></configuration>\n" );
+    file_put_contents( $dir . '/index.php', '<?php // silence' );
 }
 
 function cmi_pp_deactivate() {

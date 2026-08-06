@@ -133,11 +133,12 @@ class CMI_Guest_Access {
 
         $list = [];
         foreach ( $reports as $r ) {
-            $list[] = self::format_report_row( $r, $mobile );
+            $list[] = self::format_report_row( $r, 'mobile', $mobile );
         }
         foreach ( $rxs as $r ) {
-            $list[] = self::format_report_row( $r, $mobile );
+            $list[] = self::format_report_row( $r, 'mobile', $mobile );
         }
+        $list = array_values( array_filter( $list ) );
 
         if ( empty( $list ) ) {
             wp_send_json_error( [ 'message' => 'No reports found.' ] );
@@ -146,13 +147,19 @@ class CMI_Guest_Access {
         wp_send_json_success( [ 'reports' => $list ] );
     }
 
-    private static function format_report_row( $post, $mobile ) {
+    private static function format_report_row( $post, $identity_type, $identity_value ) {
+        $claim = CMI_Security::identity_claim( $identity_type, $identity_value );
+        if ( ! $claim || ! CMI_Security::identity_can_access_report( $post->ID, $claim ) ) {
+            return null;
+        }
+
         $token   = wp_generate_password( 32, false );
         $expires = time() + 600; // 10 min
         set_transient( 'cmi_gdl_' . $token, [
-            'report_id' => $post->ID,
-            'mobile'    => $mobile,
-            'expires'   => $expires,
+            'report_id'      => $post->ID,
+            'identity_type'  => $claim['identity_type'],
+            'identity_value' => $claim['identity_value'],
+            'expires'        => $expires,
         ], 600 );
 
         $terms = wp_get_post_terms( $post->ID, 'cmi_report_type', [ 'fields' => 'names' ] );
@@ -177,9 +184,17 @@ class CMI_Guest_Access {
             wp_send_json_error( [ 'message' => 'Download link expired. Please verify OTP again.' ] );
         }
 
+        if ( ! CMI_Security::identity_can_access_report( $data['report_id'], $data ) ) {
+            delete_transient( 'cmi_gdl_' . $token );
+            wp_send_json_error( [ 'message' => 'Access denied.' ] );
+        }
+
         // Generate a final signed download URL
-        $url = CMI_Download::generate_link( $data['report_id'], 'guest' );
+        $url = CMI_Download::generate_link( $data['report_id'], 'guest', $data );
         delete_transient( 'cmi_gdl_' . $token );
+        if ( empty( $url ) ) {
+            wp_send_json_error( [ 'message' => 'Access denied.' ] );
+        }
 
         wp_send_json_success( [ 'url' => $url ] );
     }
@@ -213,7 +228,7 @@ class CMI_Guest_Access {
         set_transient( 'cmi_magic_' . $token, $email, 15 * MINUTE_IN_SECONDS ); // Valid for 15 minutes
 
         // Get redirect URL from post request
-        $redirect_url = esc_url_raw( $_POST['redirect_url'] ?? home_url( '/' ) );
+        $redirect_url = CMI_Security::local_redirect_url( $_POST['redirect_url'] ?? home_url( '/' ) );
         $magic_link   = add_query_arg( 'cmi_magic_token', $token, $redirect_url );
 
         $subject = 'Secure Access Link for CMI Healthcare Reports';
@@ -254,11 +269,12 @@ class CMI_Guest_Access {
 
         $list = [];
         foreach ( $reports as $r ) {
-            $list[] = self::format_report_row( $r, $email );
+            $list[] = self::format_report_row( $r, 'email', $email );
         }
         foreach ( $rxs as $r ) {
-            $list[] = self::format_report_row( $r, $email );
+            $list[] = self::format_report_row( $r, 'email', $email );
         }
+        $list = array_values( array_filter( $list ) );
 
         if ( empty( $list ) ) {
             wp_send_json_error( [ 'message' => 'No reports found.' ] );
@@ -282,6 +298,9 @@ class CMI_Guest_Access {
 
         if ( ! $report_id ) {
             wp_send_json_error( [ 'message' => 'Invalid report.' ] );
+        }
+        if ( ! CMI_Download::user_can_download( $report_id ) ) {
+            wp_send_json_error( [ 'message' => 'Access denied.' ] );
         }
 
         // Generate OTP keyed by email
@@ -320,6 +339,10 @@ class CMI_Guest_Access {
         $otp       = sanitize_text_field( $_POST['otp'] ?? '' );
         $report_id = absint( $_POST['report_id'] ?? 0 );
 
+        if ( ! $report_id || ! CMI_Download::user_can_download( $report_id ) ) {
+            wp_send_json_error( [ 'message' => 'Access denied.' ] );
+        }
+
         if ( ! CMI_OTP::verify( $email, $otp ) ) {
             wp_send_json_error( [ 'message' => 'Invalid or expired OTP. Please try again.' ] );
         }
@@ -332,6 +355,9 @@ class CMI_Guest_Access {
 
         // OTP verified – generate signed download URL
         $url = CMI_Download::generate_link( $report_id, 'patient_email_verified' );
+        if ( empty( $url ) ) {
+            wp_send_json_error( [ 'message' => 'Access denied.' ] );
+        }
         wp_send_json_success( [ 'url' => $url ] );
     }
 
@@ -453,11 +479,12 @@ class CMI_Guest_Access {
 
         $list = [];
         foreach ( $reports as $r ) {
-            $list[] = self::format_report_row( $r, $uid );
+            $list[] = self::format_report_row( $r, 'uid', $uid );
         }
         foreach ( $rxs as $r ) {
-            $list[] = self::format_report_row( $r, $uid );
+            $list[] = self::format_report_row( $r, 'uid', $uid );
         }
+        $list = array_values( array_filter( $list ) );
 
         if ( empty( $list ) ) {
             wp_send_json_error( [ 'message' => 'No reports found.' ] );

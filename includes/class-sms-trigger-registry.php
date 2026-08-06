@@ -22,7 +22,7 @@ class CMI_SMS_Trigger_Registry {
      * Schema version for trigger registry. Increment when default trigger values change
      * (e.g. recipient_type or async fixes) to force DB reset on existing installs.
      */
-    private static $schema_version = 4; // Synchronous real-time SMS dispatch (no WP-Cron dependence)
+    private static $schema_version = 5; // Rows 45, 46, 47 DLT template integration & consultation cancelled trigger
 
     public static function get_all_triggers() {
         $saved          = get_option(self::$option_key, false);
@@ -154,12 +154,26 @@ class CMI_SMS_Trigger_Registry {
             ],
             'trig_consultation_completed' => [
                 'trigger_id'     => 'trig_consultation_completed',
-                'title'          => __('Digital Prescription Uploaded / Consultation Completed', 'cmi-partner-portal'),
-                'desc'           => __('Fired when doctor completes session and uploads digital prescription PDF.', 'cmi-partner-portal'),
+                'title'          => __('Digital Prescription / Consultation Report Uploaded', 'cmi-partner-portal'),
+                'desc'           => __('Fired when doctor completes session and uploads consultation report PDF.', 'cmi-partner-portal'),
                 'hook_name'      => 'cmi_consultation_completed',
                 'hook_priority'  => 10,
                 'accepted_args'  => 1,
                 'template_key'   => 'prescription_ready',
+                'recipient_type' => 'consultation_patient',
+                'arg_position'   => 1,
+                'resolver'       => 'consultation',
+                'enabled'        => 'yes',
+                'async'          => 'no',
+            ],
+            'trig_consultation_cancelled' => [
+                'trigger_id'     => 'trig_consultation_cancelled',
+                'title'          => __('Doctor Consultation Cancelled & Refund Notice', 'cmi-partner-portal'),
+                'desc'           => __('Fired when a patient or admin cancels a doctor consultation.', 'cmi-partner-portal'),
+                'hook_name'      => 'cmi_consultation_cancelled',
+                'hook_priority'  => 10,
+                'accepted_args'  => 1,
+                'template_key'   => 'consultation_cancelled',
                 'recipient_type' => 'consultation_patient',
                 'arg_position'   => 1,
                 'resolver'       => 'consultation',

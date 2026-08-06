@@ -12,7 +12,7 @@ class CMI_Download {
     /**
      * Generate a signed download URL valid for 30 minutes.
      */
-    public static function generate_link( $report_id, $context = 'user' ) {
+    public static function generate_link( $report_id, $context = 'user', $claims = [] ) {
         $token   = wp_generate_password( 32, false );
         $expires = time() + ( 30 * 60 ); // 30 minutes
 
@@ -24,6 +24,15 @@ class CMI_Download {
 
         if ( is_numeric( $report_id ) ) {
             $transient_data['report_id'] = absint( $report_id );
+            if ( in_array( $context, [ 'guest', 'magic', 'uid' ], true ) ) {
+                if ( ! CMI_Security::identity_can_access_report( $transient_data['report_id'], $claims ) ) {
+                    return '';
+                }
+                $transient_data['identity_type']  = $claims['identity_type'];
+                $transient_data['identity_value'] = $claims['identity_value'];
+            } elseif ( ! self::user_can_download( $transient_data['report_id'] ) ) {
+                return '';
+            }
         } else {
             $transient_data['file_name'] = sanitize_file_name( $report_id );
         }
@@ -60,6 +69,13 @@ class CMI_Download {
                 wp_die( 'Report not found.', 'Not Found', [ 'response' => 404 ] );
             }
             $file_name = get_post_meta( $report_id, '_cmi_file_name', true );
+            if ( in_array( $data['context'] ?? '', [ 'guest', 'magic', 'uid' ], true ) ) {
+                if ( ! CMI_Security::identity_can_access_report( $report_id, $data ) ) {
+                    wp_die( 'Access denied.', 'Forbidden', [ 'response' => 403 ] );
+                }
+            } elseif ( ! self::user_can_download( $report_id ) ) {
+                wp_die( 'Access denied.', 'Forbidden', [ 'response' => 403 ] );
+            }
         } elseif ( ! empty( $data['file_name'] ) ) {
             // Check access: only admins or logged-in users with correct caps can download arbitrary filenames
             $user = wp_get_current_user();
@@ -80,6 +96,12 @@ class CMI_Download {
         }
 
         $file_path = CMI_PP_UPLOAD_DIR . '/' . $file_name;
+        if ( ! file_exists( $file_path ) && defined( 'CMI_PP_LEGACY_UPLOAD_DIR' ) ) {
+            $legacy_path = CMI_PP_LEGACY_UPLOAD_DIR . '/' . $file_name;
+            if ( file_exists( $legacy_path ) ) {
+                $file_path = $legacy_path;
+            }
+        }
 
         if ( ! file_exists( $file_path ) ) {
             wp_die( 'Report file not found on server.', 'File Missing', [ 'response' => 404 ] );

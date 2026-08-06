@@ -75,6 +75,7 @@ class CMI_HT_DB {
         $sql_consultations = "CREATE TABLE IF NOT EXISTS $table_consultations (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             order_id BIGINT UNSIGNED DEFAULT NULL,
+            order_item_id BIGINT UNSIGNED DEFAULT NULL,
             user_id BIGINT UNSIGNED NOT NULL,
             patient_member_id BIGINT UNSIGNED NOT NULL,
             patient_name VARCHAR(255) NOT NULL,
@@ -98,9 +99,11 @@ class CMI_HT_DB {
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,
             PRIMARY KEY (id),
+            UNIQUE KEY order_item_id (order_item_id),
             KEY user_id (user_id),
             KEY doctor_id (doctor_id),
-            KEY status (status)
+            KEY status (status),
+            KEY user_date (user_id, patient_member_id, preferred_date)
         ) $charset_collate;";
 
         dbDelta( $sql_consultations );
@@ -149,6 +152,9 @@ class CMI_HT_DB {
             if ( ! in_array( 'order_id', $cols ) ) {
                 $wpdb->query( "ALTER TABLE $table_consultations ADD COLUMN order_id BIGINT UNSIGNED DEFAULT NULL AFTER id" );
             }
+            if ( ! in_array( 'order_item_id', $cols ) ) {
+                $wpdb->query( "ALTER TABLE $table_consultations ADD COLUMN order_item_id BIGINT UNSIGNED DEFAULT NULL AFTER order_id" );
+            }
             if ( ! in_array( 'meeting_room_id', $cols ) ) {
                 $wpdb->query( "ALTER TABLE $table_consultations ADD COLUMN meeting_room_id VARCHAR(100) DEFAULT NULL AFTER doctor_id" );
             }
@@ -164,6 +170,14 @@ class CMI_HT_DB {
             $existing_indexes = $wpdb->get_col( "SHOW INDEX FROM $table_consultations WHERE Key_name = 'idx_doctor_slot'" );
             if ( empty( $existing_indexes ) ) {
                 $wpdb->query( "ALTER TABLE $table_consultations ADD INDEX idx_doctor_slot (doctor_id, preferred_date, preferred_time_slot)" );
+            }
+            $existing_order_item = $wpdb->get_col( "SHOW INDEX FROM $table_consultations WHERE Key_name = 'order_item_id'" );
+            if ( empty( $existing_order_item ) ) {
+                $wpdb->query( "ALTER TABLE $table_consultations ADD UNIQUE KEY order_item_id (order_item_id)" );
+            }
+            $existing_user_date = $wpdb->get_col( "SHOW INDEX FROM $table_consultations WHERE Key_name = 'user_date'" );
+            if ( empty( $existing_user_date ) ) {
+                $wpdb->query( "ALTER TABLE $table_consultations ADD INDEX user_date (user_id, patient_member_id, preferred_date)" );
             }
         }
     }
@@ -334,4 +348,3 @@ class CMI_HT_DB {
         );
     }
 }
-

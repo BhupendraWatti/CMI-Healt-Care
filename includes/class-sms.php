@@ -166,7 +166,7 @@ class CMI_SMS_Manager
     public static function get_categorized_events()
     {
         $saved = get_option('cmi_custom_sms_templates', false);
-        if (is_array($saved) && !empty($saved)) {
+        if (is_array($saved) && !empty($saved['telemedicine']['events']['consultation_reminder']) && !empty($saved['telemedicine']['events']['consultation_cancelled'])) {
             return $saved;
         }
 
@@ -297,14 +297,14 @@ class CMI_SMS_Manager
                         'vars' => ['{name}', '{id}']
                     ],
                     'consultation_assigned' => [
-                        'title' => 'Doctor Assigned to Consultation (Doctor Notice)',
-                        'desc' => 'Sent to the doctor when assigned to a new patient consultation.',
+                        'title' => 'Doctor Assigned to Consultation (Patient Notice)',
+                        'desc' => 'Sent to patient when a doctor is assigned to a consultation session.',
                         'tmpl_id_key' => 'cmi_dlt_tmpl_consultation_assigned',
                         'msg_key' => 'cmi_dlt_msg_consultation_assigned',
                         'enable_key' => 'cmi_dlt_enable_consultation_assigned',
                         'type_key' => 'cmi_dlt_type_consultation_assigned',
                         'default_tmpl' => '1077191330019642880',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', "Hello {name}, your video consultation {id} with Dr. {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_assigned', "Hello {name}, your video consultation {id} with Dr.  {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
                         'default_type' => 'SERVICE_IMPLICIT',
                         'vars' => ['{name}', '{id}', '{doctor}']
                     ],
@@ -316,7 +316,19 @@ class CMI_SMS_Manager
                         'enable_key' => 'cmi_dlt_enable_consultation_scheduled',
                         'type_key' => 'cmi_dlt_type_consultation_scheduled',
                         'default_tmpl' => '1077191330019642880',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', "Hello {name}, your video consultation {id} with Dr. {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_scheduled', "Hello {name}, your video consultation {id} with Dr.  {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare."),
+                        'default_type' => 'SERVICE_IMPLICIT',
+                        'vars' => ['{name}', '{id}', '{doctor}']
+                    ],
+                    'consultation_reminder' => [
+                        'title' => 'Pre-Meeting Consultation Reminder (5 Min Before Slot)',
+                        'desc' => 'Sent to patient 5 minutes before scheduled video consultation start time.',
+                        'tmpl_id_key' => 'cmi_dlt_tmpl_consultation_reminder',
+                        'msg_key' => 'cmi_dlt_msg_consultation_reminder',
+                        'enable_key' => 'cmi_dlt_enable_consultation_reminder',
+                        'type_key' => 'cmi_dlt_type_consultation_reminder',
+                        'default_tmpl' => '1077295670034604987',
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_reminder', "Hello {name}, \r\nreminder: your video consultation {id} with Dr. {doctor} starts soon. \r\nLog in to join at https://cmihealthcare.in/my-account/patient-consultations/  .\r\nThanks CMI HealthCare.\r\n"),
                         'default_type' => 'SERVICE_IMPLICIT',
                         'vars' => ['{name}', '{id}', '{doctor}']
                     ],
@@ -333,14 +345,26 @@ class CMI_SMS_Manager
                         'vars' => ['{name}', '{id}']
                     ],
                     'prescription_ready' => [
-                        'title' => 'Digital Prescription Uploaded / Consultation Completed',
-                        'desc' => 'Sent when doctor completes the session and uploads the prescription PDF.',
+                        'title' => 'Consultation Report / Prescription Uploaded',
+                        'desc' => 'Sent when doctor completes session and uploads consultation report PDF.',
                         'tmpl_id_key' => 'cmi_dlt_tmpl_consultation_completed',
                         'msg_key' => 'cmi_dlt_msg_consultation_completed',
                         'enable_key' => 'cmi_dlt_enable_consultation_completed',
                         'type_key' => 'cmi_dlt_type_consultation_completed',
-                        'default_tmpl' => '1077112990022812102',
-                        'default_msg' => get_option('cmi_dlt_msg_consultation_completed', "Hello {name}, your medical test report for Order {id} is ready for download in your account. \r\nThanks CMI HealthCare."),
+                        'default_tmpl' => '1077322480031395710',
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_completed', "Hello {name}, your doctor consultation report for request {id} has been uploaded. \r\nLog in to your account at https://cmihealthcare.in/my-account/patient-reports/  to download. \r\nThanks CMI HealthCare."),
+                        'default_type' => 'SERVICE_IMPLICIT',
+                        'vars' => ['{name}', '{id}']
+                    ],
+                    'consultation_cancelled' => [
+                        'title' => 'Doctor Consultation Cancelled & Refund Notice',
+                        'desc' => 'Sent to patient when a doctor consultation request is cancelled.',
+                        'tmpl_id_key' => 'cmi_dlt_tmpl_consultation_cancelled',
+                        'msg_key' => 'cmi_dlt_msg_consultation_cancelled',
+                        'enable_key' => 'cmi_dlt_enable_consultation_cancelled',
+                        'type_key' => 'cmi_dlt_type_consultation_cancelled',
+                        'default_tmpl' => '1077338690031418631',
+                        'default_msg' => get_option('cmi_dlt_msg_consultation_cancelled', "Hello {name}, your doctor consultation request {id} has been cancelled. If any payment was made, your refund process will be initiated shortly. Thanks CMI HealthCare.\r\n"),
                         'default_type' => 'SERVICE_IMPLICIT',
                         'vars' => ['{name}', '{id}']
                     ],
@@ -552,9 +576,52 @@ class CMI_SMS_Manager
             return false;
         }
 
-        $tmpl_id  = get_option($tmpl_id_key, $event_def['default_tmpl'] ?? '');
-        $msg      = get_option($msg_key, $event_def['default_msg'] ?? '');
-        $msg_type = get_option($type_key, $event_def['default_type'] ?? 'SERVICE_IMPLICIT');
+        $tmpl_id = get_option($tmpl_id_key);
+        if (empty($tmpl_id)) {
+            $tmpl_id = get_option('cmi_dlt_tmpl_' . $event_key);
+        }
+        if (empty($tmpl_id) && !empty($event_def['alt_tmpl_id_key'])) {
+            $tmpl_id = get_option($event_def['alt_tmpl_id_key']);
+        }
+        if (empty($tmpl_id)) {
+            $tmpl_id = $event_def['default_tmpl'] ?? '';
+        }
+
+        $msg = get_option($msg_key);
+        if (empty($msg)) {
+            $msg = get_option('cmi_dlt_msg_' . $event_key);
+        }
+        if (empty($msg) && !empty($event_def['alt_msg_key'])) {
+            $msg = get_option($event_def['alt_msg_key']);
+        }
+        if (empty($msg)) {
+            $msg = $event_def['default_msg'] ?? '';
+        }
+
+        $msg_type = get_option($type_key);
+        if (empty($msg_type)) {
+            $msg_type = $event_def['default_type'] ?? 'SERVICE_IMPLICIT';
+        }
+
+        // Auto-fix DLT Template ID + Message for consultation_completed / prescription_ready (Row 46 / DLT 1077322480031395710)
+        if ($event_key === 'prescription_ready' || $event_key === 'consultation_completed' || empty($tmpl_id) || strpos($tmpl_id, '107732248003139') === 0) {
+            if ($event_key === 'prescription_ready' || $event_key === 'consultation_completed') {
+                $tmpl_id = '1077322480031395710';
+                if (empty($msg)) {
+                    $msg = "Hello {name}, your doctor consultation report for request {id} has been uploaded. \r\nLog in to your account at https://cmihealthcare.in/my-account/patient-reports/  to download. \r\nThanks CMI HealthCare.";
+                }
+            }
+        }
+
+        // Auto-fix DLT Template ID + Message for consultation_scheduled / consultation_assigned (Row 43 / DLT 1077191330019642880)
+        if ($event_key === 'consultation_scheduled' || $event_key === 'consultation_booked' || $event_key === 'consultation_assigned') {
+            if (empty($tmpl_id) || $tmpl_id === '1077191330019642880') {
+                $tmpl_id = '1077191330019642880';
+            }
+            if (empty($msg)) {
+                $msg = "Hello {name}, your video consultation {id} with Dr.  {doctor} is scheduled. \r\nLog in to your portal at https://cmihealthcare.in/my-account/patient-consultations/ to join. \r\nThanks CMI HealthCare.";
+            }
+        }
 
         if (empty($tmpl_id) || empty($msg)) {
             error_log( "CMI SMS [{$event_key}] [{$mobile}]: SKIPPED — Template ID='" . ($tmpl_id ?: 'EMPTY') . "', Msg='" . (empty($msg) ? 'EMPTY' : 'OK') . "'. Go to Admin > CMI Portal > SMS Settings to configure." );
@@ -562,9 +629,28 @@ class CMI_SMS_Manager
         }
 
         // Interpolate dynamic placeholders
+        // Auto-alias: if {name} is not supplied but {patient_name} is, use patient_name as name
+        if (!isset($placeholders['name']) && isset($placeholders['patient_name'])) {
+            $placeholders['name'] = $placeholders['patient_name'];
+        }
         $interpolated = $msg;
         foreach ($placeholders as $key => $val) {
             $interpolated = str_replace('{' . $key . '}', (string) $val, $interpolated);
+        }
+
+        // Strict Airtel DLT Formatting Auto-Normalizations:
+
+        // 1. Doctor Consultation Scheduled (DLT 1077191330019642880):
+        // Must have double-space after "Dr.  " AND single-space before "to join."
+        if ($tmpl_id === '1077191330019642880' || $event_key === 'consultation_scheduled' || $event_key === 'consultation_assigned') {
+            $interpolated = preg_replace('/Dr\.\s+/', 'Dr.  ', $interpolated);
+            $interpolated = preg_replace('/patient-consultations\/\s*to join/', 'patient-consultations/ to join', $interpolated);
+        }
+
+        // 2. Consultation Report Uploaded (DLT 1077322480031395710):
+        // Must have EXACT TWO SPACES after "patient-reports/  to download."
+        if ($tmpl_id === '1077322480031395710' || $event_key === 'prescription_ready' || $event_key === 'consultation_completed') {
+            $interpolated = preg_replace('/patient-reports\/\s*to download/', 'patient-reports/  to download', $interpolated);
         }
 
         // Check for un-replaced placeholders — sign of missing data in callers
@@ -692,6 +778,16 @@ class CMI_SMS_Manager
 
         if (empty($event_key)) {
             $event_key = 'custom_msg_' . time() . '_' . rand(100, 999);
+        }
+
+        // Auto-fix truncated / malformed DLT Template ID for consultation_completed / prescription_ready
+        if ($event_key === 'prescription_ready' || $event_key === 'consultation_completed' || strpos($tmpl_id, '107732248003139') === 0) {
+            $tmpl_id = '1077322480031395710';
+        }
+
+        if ($event_key === 'consultation_scheduled') {
+            $tmpl_id = '1077191330019642880';
+            $msg_text = preg_replace('/Dr\.\s(?![\s])/', 'Dr.  ', $msg_text);
         }
 
         $all = self::get_categorized_events();

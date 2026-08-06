@@ -110,14 +110,22 @@ class CMI_CPT {
         $uid     = sanitize_text_field( $args['patient_uid'] );
         $name    = sanitize_text_field( $args['patient_name'] );
 
-        // Move file to secure directory
-        $ext      = pathinfo( $args['file_name'], PATHINFO_EXTENSION );
-        $allowed  = [ 'pdf', 'jpg', 'jpeg', 'png' ];
-        if ( ! in_array( strtolower( $ext ), $allowed ) ) {
-            return new WP_Error( 'invalid_file', 'Only PDF, JPG, PNG files are allowed.' );
+        $validation = CMI_Security::validate_uploaded_file( [
+            'tmp_name' => $args['file_tmp'],
+            'name'     => $args['file_name'],
+            'type'     => $args['file_type'],
+            'error'    => UPLOAD_ERR_OK,
+            'size'     => file_exists( $args['file_tmp'] ) ? filesize( $args['file_tmp'] ) : 0,
+        ] );
+        if ( is_wp_error( $validation ) ) {
+            return $validation;
         }
 
-        $secure_name = wp_unique_filename( CMI_PP_UPLOAD_DIR, sanitize_file_name( $args['file_name'] ) );
+        if ( ! file_exists( CMI_PP_UPLOAD_DIR ) ) {
+            wp_mkdir_p( CMI_PP_UPLOAD_DIR );
+        }
+
+        $secure_name = wp_unique_filename( CMI_PP_UPLOAD_DIR, wp_generate_password( 16, false ) . '.' . $validation['ext'] );
         $dest        = CMI_PP_UPLOAD_DIR . '/' . $secure_name;
 
         if ( ! move_uploaded_file( $args['file_tmp'], $dest ) ) {
@@ -144,7 +152,7 @@ class CMI_CPT {
         update_post_meta( $post_id, '_cmi_patient_uid',     $uid );
         update_post_meta( $post_id, '_cmi_patient_name',    $name );
         update_post_meta( $post_id, '_cmi_file_name',       $secure_name );
-        update_post_meta( $post_id, '_cmi_file_type',       $args['file_type'] );
+        update_post_meta( $post_id, '_cmi_file_type',       $validation['mime'] );
         update_post_meta( $post_id, '_cmi_notes',           sanitize_textarea_field( $args['notes'] ) );
         update_post_meta( $post_id, '_cmi_uploaded_by',     $args['uploaded_by'] );
         update_post_meta( $post_id, '_cmi_upload_date',     current_time('mysql') );
@@ -160,7 +168,7 @@ class CMI_CPT {
     /**
      * Fetch reports for a patient by mobile or UID or email.
      */
-    public static function get_patient_reports( $mobile = '', $uid = '', $post_type = 'cmi_report', $email = '' ) {
+    public static function get_patient_reports( $mobile = '', $uid = '', $post_type = 'cmi_report', $email = '', $limit = 100 ) {
         $meta_query = [ 'relation' => 'OR' ];
         if ( $mobile ) {
             $meta_query[] = [ 'key' => '_cmi_patient_mobile', 'value' => self::normalize_mobile( $mobile ) ];
@@ -176,7 +184,7 @@ class CMI_CPT {
         return get_posts([
             'post_type'      => $post_type,
             'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'posts_per_page' => max( 1, min( 200, absint( $limit ) ) ),
             'meta_query'     => $meta_query,
             'orderby'        => 'date',
             'order'          => 'DESC',

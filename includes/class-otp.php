@@ -24,18 +24,19 @@ class CMI_OTP {
 
         $table = $wpdb->prefix . 'cmi_otp';
         
-        // Log before delete+insert
-        error_log( "CMI OTP GENERATE [{$mobile}]: table={$table}, otp_plain={$otp}, expires={$expires}" );
-        
         $del = $wpdb->delete( $table, [ 'mobile' => $mobile ] );
-        error_log( "CMI OTP GENERATE [{$mobile}]: delete result=" . var_export($del, true) . " last_error='" . $wpdb->last_error . "'" );
+        if ( false === $del ) {
+            error_log( 'CMI OTP GENERATE: failed to clear prior OTP for ' . CMI_Security::mask_identifier( $mobile ) . ". last_error='" . $wpdb->last_error . "'" );
+        }
         
         $ins = $wpdb->insert( $table, [
             'mobile'     => $mobile,
             'otp'        => wp_hash_password( $otp ),
             'expires_at' => $expires,
         ]);
-        error_log( "CMI OTP GENERATE [{$mobile}]: insert result=" . var_export($ins, true) . " insert_id={$wpdb->insert_id} last_error='" . $wpdb->last_error . "'" );
+        if ( false === $ins ) {
+            error_log( 'CMI OTP GENERATE: failed to store OTP for ' . CMI_Security::mask_identifier( $mobile ) . ". last_error='" . $wpdb->last_error . "'" );
+        }
 
         return $otp;
     }
@@ -62,19 +63,19 @@ class CMI_OTP {
         if ( ! $row ) {
             $latest = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE mobile = %s ORDER BY id DESC LIMIT 1", $mobile ) );
             if ( $latest ) {
-                error_log( "CMI OTP VERIFY FAILED [{$mobile}]: Record EXPIRED. DB expires_at='{$latest->expires_at}', current_now='{$now}'." );
+                error_log( 'CMI OTP VERIFY FAILED: expired OTP for ' . CMI_Security::mask_identifier( $mobile ) . '.' );
             } else {
-                error_log( "CMI OTP VERIFY FAILED [{$mobile}]: NO RECORD found in {$table} for mobile '{$mobile}'." );
+                error_log( 'CMI OTP VERIFY FAILED: no OTP record for ' . CMI_Security::mask_identifier( $mobile ) . '.' );
             }
             return false;
         }
 
         $valid = wp_check_password( $otp, $row->otp );
         if ( $valid ) {
-            error_log( "CMI OTP VERIFY SUCCESS [{$mobile}]: Code matched!" );
+            error_log( 'CMI OTP VERIFY SUCCESS for ' . CMI_Security::mask_identifier( $mobile ) . '.' );
             $wpdb->delete( $table, [ 'id' => $row->id ] );
         } else {
-            error_log( "CMI OTP VERIFY FAILED [{$mobile}]: Password hash check failed. Entered OTP='{$otp}', Hashed OTP='{$row->otp}'." );
+            error_log( 'CMI OTP VERIFY FAILED: hash mismatch for ' . CMI_Security::mask_identifier( $mobile ) . '.' );
         }
         return $valid;
     }
@@ -136,4 +137,3 @@ class CMI_OTP {
         return false;
     }
 }
-
