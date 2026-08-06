@@ -38,9 +38,68 @@ class CMI_HT_Checkout {
     }
 
     /**
+     * Consultation checkout uses the same WooCommerce checkout page, so home
+     * collection fields must opt out when the cart/order belongs to a doctor
+     * consultation booking.
+     */
+    private function get_consultation_product_id() {
+        return absint( get_option( 'cmi_consultation_product_id', 0 ) );
+    }
+
+    private function is_consultation_cart() {
+        if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+            return false;
+        }
+
+        $consultation_product_id = $this->get_consultation_product_id();
+
+        foreach ( WC()->cart->get_cart() as $cart_item ) {
+            if ( ! empty( $cart_item['_cmi_consultation_booking'] ) ) {
+                return true;
+            }
+
+            $product_id   = isset( $cart_item['product_id'] ) ? absint( $cart_item['product_id'] ) : 0;
+            $variation_id = isset( $cart_item['variation_id'] ) ? absint( $cart_item['variation_id'] ) : 0;
+
+            if ( $consultation_product_id && ( $product_id === $consultation_product_id || $variation_id === $consultation_product_id ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function is_consultation_order( $order ) {
+        if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+            return false;
+        }
+
+        $consultation_product_id = $this->get_consultation_product_id();
+
+        foreach ( $order->get_items() as $item ) {
+            if ( $item->get_meta( '_cmi_preferred_date' ) || $item->get_meta( '_cmi_preferred_time_slot' ) ) {
+                return true;
+            }
+
+            $product_id   = absint( $item->get_product_id() );
+            $variation_id = method_exists( $item, 'get_variation_id' ) ? absint( $item->get_variation_id() ) : 0;
+
+            if ( $consultation_product_id && ( $product_id === $consultation_product_id || $variation_id === $consultation_product_id ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Render the Collection Date, Time Slot, and Patient Selection fields at checkout.
      */
     public function render_checkout_fields( $checkout ) {
+        if ( $this->is_consultation_cart() ) {
+            return;
+        }
+
         echo '<div id="cmi_home_testing_fields"><h3>' . esc_html__( 'Home Testing Appointment', 'cmi-home-testing' ) . '</h3>';
 
         // 1. Patient Selection
@@ -165,6 +224,10 @@ class CMI_HT_Checkout {
      * Validate checkout fields, including patient details and serviceable pincode validation.
      */
     public function validate_checkout_fields() {
+        if ( $this->is_consultation_cart() ) {
+            return;
+        }
+
         // Patient selection validation
         if ( empty( $_POST['cmi_patient_member_id'] ) ) {
             wc_add_notice( esc_html__( 'Please select who this booking is for.', 'cmi-home-testing' ), 'error' );
@@ -294,6 +357,10 @@ class CMI_HT_Checkout {
      * Save the fields to the order metadata (with Patient Snapshot) using HPOS compatible APIs.
      */
     public function save_checkout_fields( $order, $data ) {
+        if ( $this->is_consultation_cart() || $this->is_consultation_order( $order ) ) {
+            return;
+        }
+
         if ( ! empty( $_POST['cmi_collection_date'] ) ) {
             $date = sanitize_text_field( $_POST['cmi_collection_date'] );
             $order->update_meta_data( '_cmi_collection_date', $date );
@@ -473,6 +540,9 @@ class CMI_HT_Checkout {
         if ( ! $order ) {
             return;
         }
+        if ( $this->is_consultation_order( $order ) ) {
+            return;
+        }
         // Delegate to the shared helper — idempotency guard prevents duplicates.
         $this->ensure_assignment_record( $order_id, $order );
     }
@@ -500,6 +570,9 @@ class CMI_HT_Checkout {
         if ( ! $order ) {
             return;
         }
+        if ( $this->is_consultation_order( $order ) ) {
+            return;
+        }
         $this->ensure_assignment_record( $order_id, $order );
     }
 
@@ -516,6 +589,10 @@ class CMI_HT_Checkout {
      */
     private function ensure_assignment_record( $order_id, $order ) {
         global $wpdb;
+
+        if ( $this->is_consultation_order( $order ) ) {
+            return;
+        }
 
         $date = $order->get_meta( '_cmi_collection_date' );
         $slot = $order->get_meta( '_cmi_collection_time_slot' );

@@ -3,7 +3,7 @@
  * Plugin Name: CMI Partner Portal
  * Plugin URI:  https://cmihealthcare.in
  * Description: Partner login, report upload/download, prescriptions and guest report access for CMI Healthcare.
- * Version:     1.0.28
+ * Version:     1.0.31
  * Author:      CMI Healthcare
  * Text Domain: cmi-partner-portal
  */
@@ -22,7 +22,7 @@ function cmi_pp_conflict_notice() {
     echo '</div>';
 }
 
-define( 'CMI_PP_VERSION', '1.0.28' );
+define( 'CMI_PP_VERSION', '1.0.31' );
 define( 'CMI_PP_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'CMI_PP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'CMI_PP_LEGACY_UPLOAD_DIR', WP_CONTENT_DIR . '/cmi-secure-reports' );

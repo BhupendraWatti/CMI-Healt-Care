@@ -56,6 +56,20 @@ class CMI_Consultations {
         add_action( 'init', [ $this, 'schedule_meeting_reminder_cron' ] );
         add_action( 'cmi_check_upcoming_meeting_reminders_cron', [ $this, 'dispatch_upcoming_meeting_reminders' ] );
 
+        // WooCommerce Payment & Cart Integration Hooks (Option A)
+        add_action( 'woocommerce_before_calculate_totals', [ $this, 'apply_consultation_dynamic_price' ], 20 );
+        add_action( 'woocommerce_checkout_create_order_line_item', [ $this, 'save_consultation_order_item_meta' ], 10, 4 );
+        add_action( 'woocommerce_order_status_processing', [ $this, 'handle_consultation_payment_completed' ], 10, 2 );
+        add_action( 'woocommerce_order_status_completed', [ $this, 'handle_consultation_payment_completed' ], 10, 2 );
+        add_action( 'woocommerce_payment_complete', [ $this, 'handle_consultation_payment_completed' ], 10, 1 );
+        add_action( 'woocommerce_thankyou', [ $this, 'handle_consultation_thankyou_backstop' ], 20, 1 );
+        // Front-end transient relay: intercepts ?cmi_book_consult=TOKEN in a real WC page request
+        add_action( 'wp_loaded', [ $this, 'process_consultation_cart_relay' ], 5 );
+        // Ensure Doctor Video Consultation product is always purchasable (price set dynamically)
+        add_filter( 'woocommerce_is_purchasable', [ $this, 'ensure_consultation_product_purchasable' ], 99, 2 );
+        add_filter( 'woocommerce_available_payment_gateways', [ $this, 'filter_consultation_payment_gateways' ], 20 );
+        add_action( 'template_redirect', [ $this, 'maybe_redirect_consultation_order_received' ], 20 );
+
         // Admin Menus
         add_action( 'admin_menu', [ $this, 'register_admin_menu' ] );
     }
@@ -467,7 +481,7 @@ class CMI_Consultations {
                         <td>
                             <input type="number" id="cmi_consultation_product_id" name="cmi_consultation_product_id" class="small-text" min="0"
                                    value="<?php echo esc_attr( get_option( 'cmi_consultation_product_id', 0 ) ); ?>">
-                            <p class="description"><?php esc_html_e( 'WooCommerce product ID required to submit a consultation. Set to 0 to disable the payment gate.', 'cmi-partner-portal' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'WooCommerce product used for paid doctor consultation bookings. When set, requests go to checkout and the consultation is created only after WooCommerce confirms payment.', 'cmi-partner-portal' ); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -1192,8 +1206,12 @@ class CMI_Consultations {
                         if (response.success) {
                             msg.css({'background':'#f0fdf4', 'border-color':'#bbf7d0', 'color':'#166534'}).text(response.data.message).show();
                             setTimeout(function() {
-                                location.reload();
-                            }, 1500);
+                                if (response.data && response.data.redirect_url) {
+                                    window.location.href = response.data.redirect_url;
+                                } else {
+                                    location.reload();
+                                }
+                            }, 1000);
                         } else {
                             btn.prop('disabled', false).text('Submit Request');
                             msg.css({'background':'#fef2f2', 'border-color':'#fecaca', 'color':'#991b1b'}).text(response.data.message || 'Submission failed.').show();
@@ -1259,26 +1277,10 @@ class CMI_Consultations {
         }
 
         // ── Payment integrity gate ────────────────────────────────────────────
-        // If a consultation product ID is configured, verify the user has paid
-        // before allowing a consultation record to be created.  This prevents
-        // free consultation creation by any authenticated user who simply POSTs
-        // to this AJAX endpoint without completing payment.
-        //
-        // Configuration: set option 'cmi_consultation_product_id' to the WC
-        // product ID of the consultation product.  Leave empty to skip (e.g. for
-        // complimentary consultations or internal doctor bookings).
-        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
-        if ( $consultation_product_id <= 0 && 'yes' !== get_option( 'cmi_allow_free_consultations', 'no' ) ) {
-            wp_send_json_error( [ 'message' => esc_html__( 'Consultation payment is not configured. Please contact CMI Healthcare.', 'cmi-partner-portal' ) ] );
-        }
-
+        // If cmi_consultation_product_id is configured, the request is relayed
+        // into WooCommerce checkout below. The consultation row is created only
+        // after WooCommerce confirms payment for that order item.
         $payment = null;
-        if ( $consultation_product_id > 0 ) {
-            $payment = $this->get_available_consultation_payment( $user_id, $consultation_product_id );
-            if ( is_wp_error( $payment ) ) {
-                wp_send_json_error( [ 'message' => $payment->get_error_message() ] );
-            }
-        }
         // ── End payment gate ─────────────────────────────────────────────────
 
         $member_id_raw     = isset( $_POST['patient_member_id'] ) ? sanitize_text_field( $_POST['patient_member_id'] ) : '';
@@ -1442,6 +1444,58 @@ class CMI_Consultations {
             update_user_meta( $user_id, '_cmi_mobile', $patient_mobile );
         }
 
+        // Option A: WooCommerce Cart Integration — Transient Relay Pattern
+        //
+        // ROOT CAUSE OF PREVIOUS FAILURE (empty cart):
+        //   set_transient() was called INSIDE an open MySQL START TRANSACTION (line 1404).
+        //   When wp_send_json_success() exited (via die()), the transaction was never
+        //   committed, so MySQL auto-rolled it back — wiping the transient from wp_options.
+        //   The relay page then called get_transient() on a non-existent key → "session expired".
+        //
+        // FIX: ROLLBACK the slot-lock transaction before storing the transient.
+        //   In Option A, we don't insert a consultation row here (the row is created later
+        //   via handle_consultation_payment_completed() after WC order payment), so a ROLLBACK
+        //   releases the FOR UPDATE locks cleanly with no data loss.
+        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+        if ( $consultation_product_id > 0 && function_exists( 'WC' ) ) {
+            // CRITICAL: Release the open transaction BEFORE set_transient() writes to wp_options.
+            // Without this, the transient INSERT is inside the uncommitted transaction and
+            // gets rolled back when PHP exits after wp_send_json_success().
+            $wpdb->query( 'ROLLBACK' );
+
+            $fee = $doctor_id ? ( get_user_meta( $doctor_id, '_cmi_consultation_fee', true ) ?: '500' ) : '500';
+
+            $booking_token = 'cmi_consult_' . wp_generate_password( 20, false );
+
+            $booking_data = [
+                'consultation_product_id' => $consultation_product_id,
+                'doctor_id'               => $doctor_id,
+                'preferred_date'          => $preferred_date,
+                'preferred_time_slot'     => $preferred_time,
+                'consultation_type'       => $consultation_type,
+                'symptoms'                => $symptoms,
+                'patient_member_id'       => $member_id,
+                'patient_mobile'          => $patient_mobile,
+                'consultation_fee'        => $fee,
+                'user_id'                 => $user_id,
+            ];
+
+            // Store in transient for 5 minutes — long enough to survive the redirect.
+            // Now runs AFTER ROLLBACK so it uses autocommit and persists immediately.
+            set_transient( $booking_token, $booking_data, 5 * MINUTE_IN_SECONDS );
+
+            // Redirect to front-end URL that will process the cart add natively
+            $relay_url = add_query_arg( [
+                'cmi_book_consult' => $booking_token,
+                '_wpnonce'         => wp_create_nonce( 'cmi_book_consult_' . $booking_token ),
+            ], home_url( '/' ) );
+
+            wp_send_json_success( [
+                'message'      => esc_html__( 'Redirecting to checkout to complete your consultation booking...', 'cmi-partner-portal' ),
+                'redirect_url' => $relay_url,
+            ] );
+        }
+
         // Insert inside the open transaction.
         $result = $wpdb->insert(
             $table,
@@ -1486,6 +1540,348 @@ class CMI_Consultations {
             do_action( 'cmi_consultation_requested', $consult_id );
         }
         wp_send_json_success( [ 'message' => esc_html__( 'Your consultation request has been submitted successfully.', 'cmi-partner-portal' ) ] );
+    }
+
+    /**
+     * Dynamically override WooCommerce cart item price matching doctor consultation fee.
+     */
+    public function apply_consultation_dynamic_price( $cart ) {
+        if ( is_admin() && ! defined( 'DOING_AJAX' ) ) {
+            return;
+        }
+
+        foreach ( $cart->get_cart() as $cart_item_key => $cart_item ) {
+            if ( isset( $cart_item['_cmi_consultation_booking']['consultation_fee'] ) ) {
+                $fee = floatval( $cart_item['_cmi_consultation_booking']['consultation_fee'] );
+                if ( $fee >= 0 ) {
+                    $cart_item['data']->set_price( $fee );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ensure the Doctor Video Consultation WooCommerce product is always purchasable.
+     * Its regular price is intentionally ₹0 (overridden dynamically per doctor).
+     */
+    public function ensure_consultation_product_purchasable( $purchasable, $product ) {
+        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+        if ( $consultation_product_id > 0 && $product && $product->get_id() === $consultation_product_id ) {
+            return true;
+        }
+        return $purchasable;
+    }
+
+    /**
+     * Doctor consultations must use online payment gateways, not COD.
+     */
+    public function filter_consultation_payment_gateways( $gateways ) {
+        if ( is_admin() || ! function_exists( 'WC' ) || ! WC()->cart ) {
+            return $gateways;
+        }
+
+        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+        if ( ! $consultation_product_id ) {
+            return $gateways;
+        }
+
+        foreach ( WC()->cart->get_cart() as $cart_item ) {
+            $product_id   = isset( $cart_item['product_id'] ) ? absint( $cart_item['product_id'] ) : 0;
+            $variation_id = isset( $cart_item['variation_id'] ) ? absint( $cart_item['variation_id'] ) : 0;
+
+            if ( ! empty( $cart_item['_cmi_consultation_booking'] ) || $product_id === $consultation_product_id || $variation_id === $consultation_product_id ) {
+                unset( $gateways['cod'] );
+                break;
+            }
+        }
+
+        return $gateways;
+    }
+
+    /**
+     * Front-end Transient Relay Handler (runs on wp_loaded, priority 5).
+     *
+     * When the AJAX booking handler stores booking data in a transient and redirects
+     * the browser to /?cmi_book_consult=TOKEN, this method picks it up on the next
+     * full front-end request where WC session/cart is properly initialized.
+     * It adds the Doctor Video Consultation product to cart with booking metadata
+     * and immediately redirects to WooCommerce checkout.
+     */
+    public function process_consultation_cart_relay() {
+        // Only run on front-end with the correct query parameter
+        if ( is_admin() || empty( $_GET['cmi_book_consult'] ) ) {
+            return;
+        }
+
+        $token = sanitize_text_field( wp_unslash( $_GET['cmi_book_consult'] ) );
+        $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+
+        // Security: verify nonce before doing anything
+        if ( ! wp_verify_nonce( $nonce, 'cmi_book_consult_' . $token ) ) {
+            wp_die( esc_html__( 'Booking session expired or invalid. Please go back and try again.', 'cmi-partner-portal' ), 403 );
+        }
+
+        // Retrieve booking data from transient (auto-deleted on retrieval)
+        $booking = get_transient( $token );
+        if ( empty( $booking ) || ! is_array( $booking ) ) {
+            wp_die( esc_html__( 'Booking session expired (over 5 minutes). Please go back and re-submit your consultation request.', 'cmi-partner-portal' ), 410 );
+        }
+        delete_transient( $token );
+
+        $consultation_product_id = absint( $booking['consultation_product_id'] );
+        if ( ! $consultation_product_id || ! function_exists( 'WC' ) ) {
+            wp_die( esc_html__( 'Consultation product not configured. Please contact support.', 'cmi-partner-portal' ), 500 );
+        }
+
+        // Ensure WC is fully loaded at this point (wp_loaded guarantees it)
+        WC()->cart->empty_cart();
+
+        $cart_item_data = [
+            '_cmi_consultation_booking' => [
+                'doctor_id'           => intval( $booking['doctor_id'] ),
+                'preferred_date'      => sanitize_text_field( $booking['preferred_date'] ),
+                'preferred_time_slot' => sanitize_text_field( $booking['preferred_time_slot'] ),
+                'consultation_type'   => sanitize_text_field( $booking['consultation_type'] ),
+                'symptoms'            => sanitize_textarea_field( $booking['symptoms'] ),
+                'patient_member_id'   => intval( $booking['patient_member_id'] ),
+                'patient_mobile'      => sanitize_text_field( $booking['patient_mobile'] ),
+                'consultation_fee'    => floatval( $booking['consultation_fee'] ),
+            ]
+        ];
+
+        $cart_item_key = WC()->cart->add_to_cart( $consultation_product_id, 1, 0, [], $cart_item_data );
+
+        if ( ! $cart_item_key ) {
+            wp_die(
+                sprintf(
+                    esc_html__( 'Failed to add consultation to cart (Product ID: %d). Please ensure the Doctor Video Consultation product is Published and In Stock in WooCommerce.', 'cmi-partner-portal' ),
+                    $consultation_product_id
+                ),
+                500
+            );
+        }
+
+        // Redirect to WooCommerce checkout — WC cart is now live in the correct session context
+        wp_safe_redirect( wc_get_checkout_url() );
+        exit;
+    }
+
+    /**
+     * Save consultation booking metadata to WooCommerce order line item meta during checkout.
+     */
+    public function save_consultation_order_item_meta( $item, $cart_item_key, $values, $order ) {
+        if ( isset( $values['_cmi_consultation_booking'] ) && is_array( $values['_cmi_consultation_booking'] ) ) {
+            foreach ( $values['_cmi_consultation_booking'] as $key => $val ) {
+                $item->add_meta_data( '_cmi_' . $key, $val, true );
+            }
+        }
+    }
+
+    /**
+     * Check if an order contains the configured doctor consultation product or
+     * the consultation booking metadata saved from the cart relay.
+     */
+    private function order_contains_consultation_item( $order ) {
+        if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+            return false;
+        }
+
+        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+
+        foreach ( $order->get_items() as $item ) {
+            $product_id   = absint( $item->get_product_id() );
+            $variation_id = method_exists( $item, 'get_variation_id' ) ? absint( $item->get_variation_id() ) : 0;
+
+            if ( $item->get_meta( '_cmi_preferred_date' ) || $item->get_meta( '_cmi_preferred_time_slot' ) ) {
+                return true;
+            }
+
+            if ( $consultation_product_id && ( $product_id === $consultation_product_id || $variation_id === $consultation_product_id ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function is_consultation_order_paid( $order ) {
+        if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+            return false;
+        }
+
+        if ( $order->is_paid() ) {
+            return true;
+        }
+
+        $paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
+        return in_array( $order->get_status(), $paid_statuses, true );
+    }
+
+    /**
+     * Backstop for gateways that mark payment complete without a processing or
+     * completed transition visible to this plugin on the return request.
+     */
+    public function handle_consultation_thankyou_backstop( $order_id ) {
+        $order = $order_id ? wc_get_order( $order_id ) : null;
+        if ( $order && $this->order_contains_consultation_item( $order ) && $this->is_consultation_order_paid( $order ) ) {
+            $this->handle_consultation_payment_completed( $order_id, $order );
+        }
+    }
+
+    /**
+     * Send successful consultation checkouts to the patient consultation screen
+     * after WooCommerce has rendered/processed the order-received request.
+     */
+    public function maybe_redirect_consultation_order_received() {
+        if ( ! function_exists( 'is_order_received_page' ) || ! is_order_received_page() ) {
+            return;
+        }
+
+        $order_id = absint( get_query_var( 'order-received' ) );
+        $order    = $order_id ? wc_get_order( $order_id ) : null;
+
+        if ( $order && $this->order_contains_consultation_item( $order ) && $this->is_consultation_order_paid( $order ) ) {
+            $this->handle_consultation_payment_completed( $order_id, $order );
+            wp_safe_redirect( wc_get_account_endpoint_url( 'patient-consultations' ) );
+            exit;
+        }
+    }
+
+    /**
+     * Recover already-paid consultation orders that have not yet created rows.
+     * Called from the patient dashboard so previous successful checkouts become
+     * visible without requiring manual admin repair.
+     */
+    public static function sync_paid_consultation_orders_for_user( $user_id ) {
+        if ( ! $user_id || ! function_exists( 'wc_get_orders' ) ) {
+            return;
+        }
+
+        global $cmi_consultations_instance;
+        if ( ! ( $cmi_consultations_instance instanceof self ) ) {
+            return;
+        }
+        $instance = $cmi_consultations_instance;
+
+        $paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
+        $orders = wc_get_orders( [
+            'customer_id' => absint( $user_id ),
+            'status'      => $paid_statuses,
+            'limit'       => 20,
+            'orderby'     => 'date',
+            'order'       => 'DESC',
+            'return'      => 'objects',
+        ] );
+
+        foreach ( $orders as $order ) {
+            if ( $instance->order_contains_consultation_item( $order ) ) {
+                $instance->handle_consultation_payment_completed( $order->get_id(), $order );
+            }
+        }
+    }
+
+    /**
+     * Fired when WooCommerce order transitions to processing or completed status after payment.
+     * Idempotently creates the cmi_consultations database record, assigns doctor, and sends Airtel DLT SMS.
+     */
+    public function handle_consultation_payment_completed( $order_id, $order = null ) {
+        if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+            $order = wc_get_order( $order_id );
+        }
+        if ( ! $order ) {
+            return;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'cmi_consultations';
+        $consultation_product_id = absint( get_option( 'cmi_consultation_product_id', 0 ) );
+
+        foreach ( $order->get_items() as $item_id => $item ) {
+            $product_id   = absint( $item->get_product_id() );
+            $variation_id = method_exists( $item, 'get_variation_id' ) ? absint( $item->get_variation_id() ) : 0;
+
+            if ( $consultation_product_id > 0 && $product_id !== $consultation_product_id && $variation_id !== $consultation_product_id ) {
+                continue;
+            }
+
+            $doctor_id          = intval( $item->get_meta( '_cmi_doctor_id' ) );
+            $preferred_date     = sanitize_text_field( $item->get_meta( '_cmi_preferred_date' ) );
+            $preferred_time     = sanitize_text_field( $item->get_meta( '_cmi_preferred_time_slot' ) );
+            $consultation_type  = sanitize_text_field( $item->get_meta( '_cmi_consultation_type' ) );
+            $symptoms           = sanitize_textarea_field( $item->get_meta( '_cmi_symptoms' ) );
+            $patient_member_id  = intval( $item->get_meta( '_cmi_patient_member_id' ) );
+            $patient_mobile     = sanitize_text_field( $item->get_meta( '_cmi_patient_mobile' ) );
+            $consumed           = $item->get_meta( '_cmi_consultation_consumed' );
+
+            if ( empty( $preferred_date ) || empty( $preferred_time ) || 'yes' === $consumed ) {
+                continue;
+            }
+
+            // Idempotency check: prevent duplicate row creation for the same order item
+            $existing_id = $wpdb->get_var( $wpdb->prepare(
+                "SELECT id FROM $table WHERE order_item_id = %d LIMIT 1",
+                $item_id
+            ) );
+
+            if ( $existing_id ) {
+                $item->update_meta_data( '_cmi_consultation_consumed', 'yes' );
+                $item->save();
+                continue;
+            }
+
+            $user_id = $order->get_customer_id();
+            if ( ! $user_id ) {
+                $user = get_user_by( 'email', $order->get_billing_email() );
+                $user_id = $user ? $user->ID : 0;
+            }
+
+            $member = $patient_member_id ? CMI_HT_DB::get_member( $patient_member_id ) : null;
+            $patient_name         = $member ? $member->name : ( trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ) ?: 'Patient' );
+            $patient_gender       = $member ? $member->gender : 'Unspecified';
+            $patient_dob          = $member ? $member->dob : '';
+            $patient_relationship = $member ? $member->relationship : 'Self';
+            if ( empty( $patient_mobile ) ) {
+                $patient_mobile = $member && ! empty( $member->mobile ) ? $member->mobile : $order->get_billing_phone();
+            }
+
+            $result = $wpdb->insert(
+                $table,
+                [
+                    'order_id'             => $order_id,
+                    'order_item_id'        => $item_id,
+                    'user_id'              => $user_id,
+                    'patient_member_id'    => $patient_member_id ?: null,
+                    'patient_name'         => $patient_name,
+                    'patient_gender'       => $patient_gender,
+                    'patient_dob'          => $patient_dob,
+                    'patient_relationship' => $patient_relationship,
+                    'patient_mobile'       => $patient_mobile,
+                    'consultation_type'    => $consultation_type ?: 'General Physician',
+                    'symptoms'             => $symptoms,
+                    'preferred_date'       => $preferred_date,
+                    'preferred_time_slot'  => $preferred_time,
+                    'status'               => $doctor_id ? 'assigned' : 'requested',
+                    'doctor_id'            => $doctor_id ? $doctor_id : null,
+                    'created_at'           => current_time( 'mysql' ),
+                    'updated_at'           => current_time( 'mysql' )
+                ],
+                [ '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' ]
+            );
+
+            if ( $result ) {
+                $consult_id = $wpdb->insert_id;
+                $item->update_meta_data( '_cmi_consultation_consumed', 'yes' );
+                $item->update_meta_data( '_cmi_consultation_id', $consult_id );
+                $item->save();
+
+                if ( $doctor_id ) {
+                    self::generate_jitsi_meeting_data( $consult_id );
+                    do_action( 'cmi_consultation_assigned', $consult_id, $doctor_id );
+                } else {
+                    do_action( 'cmi_consultation_requested', $consult_id );
+                }
+            }
+        }
     }
 
     /**

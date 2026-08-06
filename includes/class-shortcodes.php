@@ -572,6 +572,9 @@ class CMI_HT_Shortcodes {
         global $wpdb;
         $table_consultations = $wpdb->prefix . 'cmi_consultations';
         $active_consultations = [];
+        if ( class_exists( 'CMI_Consultations' ) ) {
+            CMI_Consultations::sync_paid_consultation_orders_for_user( $user->ID );
+        }
         if ( $wpdb->get_var( "SHOW TABLES LIKE '$table_consultations'" ) === $table_consultations ) {
             $active_consultations = $wpdb->get_results( $wpdb->prepare(
                 "SELECT * FROM $table_consultations 
