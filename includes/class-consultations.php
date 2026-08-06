@@ -1839,7 +1839,8 @@ class CMI_Consultations {
         $email = $user ? $user->user_email   : '';
 
         $now = time();
-        $exp = $now + ( 2 * HOUR_IN_SECONDS ); // Token valid for 2 hours
+        $ttl_minutes = max( 5, min( 60, absint( get_option( 'cmi_jitsi_token_ttl_minutes', 20 ) ) ) );
+        $exp = $now + ( $ttl_minutes * MINUTE_IN_SECONDS );
 
         $b64url = function ( $data ) {
             return rtrim( strtr( base64_encode( $data ), '+/', '-_' ), '=' );
@@ -3156,6 +3157,7 @@ class CMI_Consultations {
 
         global $wpdb;
         $table = $wpdb->prefix . 'cmi_consultations';
+        $updated = null;
 
         // Only the assigned doctor may update the consultation status.
         $row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d AND doctor_id = %d", $id, $user_id ) );
@@ -3166,7 +3168,25 @@ class CMI_Consultations {
         if ( 'in_progress' === $status ) {
             // Accept both 'scheduled' and 'assigned' — in_progress is the next valid state from either.
             if ( in_array( $row->status, [ 'scheduled', 'assigned' ], true ) ) {
-                $wpdb->update(
+                $lock_name = $wpdb->prefix . 'cmi_doctor_meeting_' . absint( $user_id );
+                $lock_acquired = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock_name ) );
+                if ( 1 !== $lock_acquired ) {
+                    wp_send_json_error( [ 'message' => esc_html__( 'The consultation room is busy. Please try again in a few seconds.', 'cmi-partner-portal' ) ] );
+                }
+
+                $active_other = $wpdb->get_var( $wpdb->prepare(
+                    "SELECT id FROM $table
+                     WHERE doctor_id = %d AND status = 'in_progress' AND id != %d
+                     LIMIT 1",
+                    $user_id,
+                    $id
+                ) );
+                if ( $active_other ) {
+                    $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+                    wp_send_json_error( [ 'message' => esc_html__( 'Another consultation is already in progress. Please end it before starting this room.', 'cmi-partner-portal' ) ] );
+                }
+
+                $updated = $wpdb->update(
                     $table,
                     [
                         'status'         => 'in_progress',
@@ -3177,12 +3197,17 @@ class CMI_Consultations {
                     [ '%s', '%s', '%s' ],
                     [ '%d' ]
                 );
-                do_action( 'cmi_consultation_in_progress', $id );
+                $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+                if ( false !== $updated ) {
+                    do_action( 'cmi_consultation_in_progress', $id );
+                }
+            } else {
+                wp_send_json_error( [ 'message' => esc_html__( 'This consultation cannot be started from its current status.', 'cmi-partner-portal' ) ] );
             }
         } elseif ( 'awaiting_prescription' === $status ) {
             // Transition to awaiting_prescription when doctor ends call.
             if ( in_array( $row->status, [ 'scheduled', 'assigned', 'in_progress' ], true ) ) {
-                $wpdb->update(
+                $updated = $wpdb->update(
                     $table,
                     [
                         'status'         => 'awaiting_prescription',
@@ -3193,8 +3218,16 @@ class CMI_Consultations {
                     [ '%s', '%s', '%s' ],
                     [ '%d' ]
                 );
-                do_action( 'cmi_consultation_awaiting_prescription', $id );
+                if ( false !== $updated ) {
+                    do_action( 'cmi_consultation_awaiting_prescription', $id );
+                }
+            } else {
+                wp_send_json_error( [ 'message' => esc_html__( 'This consultation cannot be ended from its current status.', 'cmi-partner-portal' ) ] );
             }
+        }
+
+        if ( false === $updated ) {
+            wp_send_json_error( [ 'message' => esc_html__( 'Database error. Please try again.', 'cmi-partner-portal' ) ] );
         }
 
         wp_send_json_success();

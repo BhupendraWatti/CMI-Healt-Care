@@ -11,6 +11,8 @@ class CMI_HT_DB {
     public static function create_tables() {
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
+        $schema_ok = true;
+        $schema_messages = [];
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -31,9 +33,11 @@ class CMI_HT_DB {
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,
             PRIMARY KEY (id),
-            KEY order_id (order_id),
+            UNIQUE KEY unique_order_id (order_id),
             KEY partner_id (partner_id),
-            KEY status (status)
+            KEY status (status),
+            KEY collection_date (collection_date),
+            KEY date_slot (collection_date, collection_time_slot)
         ) $charset_collate;";
 
         dbDelta( $sql_testing );
@@ -173,13 +177,66 @@ class CMI_HT_DB {
             }
             $existing_order_item = $wpdb->get_col( "SHOW INDEX FROM $table_consultations WHERE Key_name = 'order_item_id'" );
             if ( empty( $existing_order_item ) ) {
-                $wpdb->query( "ALTER TABLE $table_consultations ADD UNIQUE KEY order_item_id (order_item_id)" );
+                $duplicate_order_items = (int) $wpdb->get_var(
+                    "SELECT COUNT(*) FROM (
+                        SELECT order_item_id FROM $table_consultations
+                        WHERE order_item_id IS NOT NULL
+                        GROUP BY order_item_id HAVING COUNT(*) > 1
+                    ) duplicate_order_item_groups"
+                );
+                if ( 0 === $duplicate_order_items ) {
+                    $result = $wpdb->query( "ALTER TABLE $table_consultations ADD UNIQUE KEY order_item_id (order_item_id)" );
+                    if ( false === $result ) {
+                        $schema_ok = false;
+                        $schema_messages[] = 'Unable to add cmi_consultations.order_item_id unique index.';
+                    }
+                } else {
+                    $schema_ok = false;
+                    $schema_messages[] = 'Duplicate consultation order_item_id values prevent unique index creation.';
+                }
             }
             $existing_user_date = $wpdb->get_col( "SHOW INDEX FROM $table_consultations WHERE Key_name = 'user_date'" );
             if ( empty( $existing_user_date ) ) {
                 $wpdb->query( "ALTER TABLE $table_consultations ADD INDEX user_date (user_id, patient_member_id, preferred_date)" );
             }
         }
+
+        if ( $wpdb->get_var( "SHOW TABLES LIKE '$table_testing'" ) === $table_testing ) {
+            $existing_order_unique = $wpdb->get_col( "SHOW INDEX FROM $table_testing WHERE Key_name = 'unique_order_id'" );
+            if ( empty( $existing_order_unique ) ) {
+                $duplicate_orders = (int) $wpdb->get_var(
+                    "SELECT COUNT(*) FROM (
+                        SELECT order_id FROM $table_testing GROUP BY order_id HAVING COUNT(*) > 1
+                    ) duplicate_order_groups"
+                );
+                if ( 0 === $duplicate_orders ) {
+                    $result = $wpdb->query( "ALTER TABLE $table_testing ADD UNIQUE KEY unique_order_id (order_id)" );
+                    if ( false === $result ) {
+                        $schema_ok = false;
+                        $schema_messages[] = 'Unable to add cmi_home_testing.order_id unique index.';
+                    }
+                } else {
+                    $schema_ok = false;
+                    $schema_messages[] = 'Duplicate home testing order_id values prevent unique index creation.';
+                }
+            }
+            $existing_collection_date = $wpdb->get_col( "SHOW INDEX FROM $table_testing WHERE Key_name = 'collection_date'" );
+            if ( empty( $existing_collection_date ) ) {
+                $wpdb->query( "ALTER TABLE $table_testing ADD INDEX collection_date (collection_date)" );
+            }
+            $existing_date_slot = $wpdb->get_col( "SHOW INDEX FROM $table_testing WHERE Key_name = 'date_slot'" );
+            if ( empty( $existing_date_slot ) ) {
+                $wpdb->query( "ALTER TABLE $table_testing ADD INDEX date_slot (collection_date, collection_time_slot)" );
+            }
+        }
+
+        if ( $schema_ok ) {
+            delete_option( 'cmi_pp_schema_needs_attention' );
+        } else {
+            update_option( 'cmi_pp_schema_needs_attention', $schema_messages, false );
+        }
+
+        return $schema_ok;
     }
 
     /**

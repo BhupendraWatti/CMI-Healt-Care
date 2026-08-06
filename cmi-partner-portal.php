@@ -3,7 +3,7 @@
  * Plugin Name: CMI Partner Portal
  * Plugin URI:  https://cmihealthcare.in
  * Description: Partner login, report upload/download, prescriptions and guest report access for CMI Healthcare.
- * Version:     1.0.27
+ * Version:     1.0.28
  * Author:      CMI Healthcare
  * Text Domain: cmi-partner-portal
  */
@@ -22,7 +22,7 @@ function cmi_pp_conflict_notice() {
     echo '</div>';
 }
 
-define( 'CMI_PP_VERSION', '1.0.27' );
+define( 'CMI_PP_VERSION', '1.0.28' );
 define( 'CMI_PP_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'CMI_PP_URL',     plugin_dir_url( __FILE__ ) );
 define( 'CMI_PP_LEGACY_UPLOAD_DIR', WP_CONTENT_DIR . '/cmi-secure-reports' );
@@ -171,6 +171,7 @@ function cmi_pp_deactivate() {
 
 add_action( 'init', [ 'CMI_CPT', 'register' ] );
 add_action( 'init', [ 'CMI_Guest_Access', 'init' ] );
+add_action( 'init', 'cmi_pp_maybe_run_migrations', 1 );
 add_action( 'init', 'cmi_pp_ensure_roles_and_caps' );
 add_action( 'wp_enqueue_scripts', 'cmi_pp_enqueue_scripts' );
 add_action( 'admin_enqueue_scripts', 'cmi_pp_admin_scripts' );
@@ -191,6 +192,29 @@ function cmi_pp_ensure_roles_and_caps() {
     if ( $heal_needed ) {
         require_once CMI_PP_PATH . 'includes/class-roles.php';
         CMI_Roles::create_roles();
+    }
+}
+
+function cmi_pp_maybe_run_migrations() {
+    $installed_version = get_option( 'cmi_pp_schema_version', '' );
+    if ( CMI_PP_VERSION === $installed_version ) {
+        return;
+    }
+
+    $schema_ok = true;
+    if ( class_exists( 'CMI_HT_DB' ) ) {
+        $schema_ok = CMI_HT_DB::create_tables();
+    }
+
+    if ( ! file_exists( CMI_PP_UPLOAD_DIR ) ) {
+        wp_mkdir_p( CMI_PP_UPLOAD_DIR );
+    }
+    if ( is_writable( CMI_PP_UPLOAD_DIR ) ) {
+        cmi_pp_protect_upload_directory( CMI_PP_UPLOAD_DIR );
+    }
+
+    if ( $schema_ok ) {
+        update_option( 'cmi_pp_schema_version', CMI_PP_VERSION, false );
     }
 }
 

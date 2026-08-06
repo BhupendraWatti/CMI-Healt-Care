@@ -1513,7 +1513,7 @@ jQuery(function ($) {
                         if (!patientPollInterval) {
                             patientPollInterval = setInterval(function() {
                                 checkAccessAndLaunch(true);
-                            }, 5000);
+                            }, 10000);
                         }
                         return;
                     }
